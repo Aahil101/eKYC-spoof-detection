@@ -1,0 +1,12 @@
+# ML stack used from milestone 3 onward. NOT installed by default on the laptop.
+# On Kaggle, torch/torchvision are preinstalled; these extras are installed from the
+# wheelhouse dataset when internet is off (see docs/KAGGLE.md).
+# Versions are pinned when milestone 3 is implemented and verified on Kaggle.
+# open_clip_torch      # frozen CLIP ViT-B/16 (M2 default backbone)
+# mediapipe            # Face Landmarker 478 points (M4/M5, quality face size/pose)
+# insightface          # ArcFace buffalo_l (M5) - NON-COMMERCIAL model license
+# onnxruntime          # insightface runtime
+# facenet-pytorch      # drop-in alternative face matcher (M5)
+# scikit-learn         # heads, isotonic, HDBSCAN
+# vosk                 # offline ASR for "read digits" challenge (optional)
+# kaggle               # optional: CLI/API for pushing notebooks and fetching small subsets

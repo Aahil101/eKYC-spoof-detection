@@ -1,0 +1,19 @@
+job: dataset_audit
+run_name: dataset_audit
+implemented: true
+seed: 0
+description: Count files/sizes/layout of attached Kaggle mirrors to verify them against the original datasets.
+params:
+  datasets: [ffpp_c23, celebdf_v2, celeba_spoof, df40]
+modes:
+  smoke: {}
+  full: {}
+checkpoint: {every_steps: 1000000, every_minutes: 1000, keep_last: 1}
+budget: {max_wall_minutes: 120}
+data:
+  datasets: [ffpp_c23, celebdf_v2, celeba_spoof, df40]
+kaggle:
+  accelerator: none
+  internet: true
+  pip_packages: []
+  weights_datasets: []

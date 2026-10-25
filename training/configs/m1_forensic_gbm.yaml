@@ -1,0 +1,18 @@
+job: m1_forensic_gbm
+run_name: m1_forensic_sidtd
+implemented: false        # milestone 3
+module: M1
+seed: 0
+description: ELA/DCT/noise-residual/recapture-FFT/MRZ features with gradient boosting + isotonic (CPU).
+params: {learner: hist_gbm, calibration: isotonic}
+modes:
+  smoke: {max_images_per_class: 40}
+  full: {max_images_per_class: null}
+checkpoint: {every_steps: 2000, every_minutes: 10, keep_last: 2}
+budget: {max_wall_minutes: 660}
+data: {datasets: [sidtd]}
+kaggle:
+  accelerator: none
+  internet: false
+  pip_packages: [scikit-learn]
+  weights_datasets: []

@@ -1,0 +1,14 @@
+# Decision policy. Thresholds are NOT set by hand: they are written here by
+# experiments/E4 (threshold selection on the validation split) and copied into the
+# model bundle manifest. Until then they are null and the API returns decision=UNAVAILABLE.
+targets:
+  apcer_max: 0.01        # attack acceptance target used to pick T_high
+  bpcer_max: 0.02        # bona fide rejection target used to pick T_low
+  veto_false_trigger_max: 0.001
+thresholds:
+  t_high: null
+  t_low: null
+  veto_p_fraud: null
+  veto_min_confidence: null
+critical_modules: [M2, M3]
+fusion_strategy: F6       # F0..F6, see docs/ARCHITECTURE.md section 6.2

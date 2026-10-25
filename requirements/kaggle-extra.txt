@@ -1,0 +1,15 @@
+# Packages that are NOT preinstalled on the Kaggle Python image and must be put in the
+# `codmav-wheels` Kaggle dataset for internet-OFF notebooks. Build the wheelhouse INSIDE a
+# Kaggle notebook with internet ON (so wheels match the Kaggle Python/ABI):
+#     pip download -d /kaggle/working/wheels -r requirements/kaggle-extra.txt
+# then save the output as dataset `<you>/codmav-wheels` (see docs/KAGGLE.md section 4).
+# Versions get pinned when milestone 3 jobs are verified on Kaggle.
+open_clip_torch
+mediapipe
+insightface
+onnxruntime-gpu
+facenet-pytorch
+vosk
+av
+structlog
+pydantic-settings

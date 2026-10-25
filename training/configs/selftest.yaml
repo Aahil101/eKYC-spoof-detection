@@ -1,0 +1,30 @@
+job: selftest_logreg
+run_name: selftest
+implemented: true
+seed: 0
+description: Plumbing test for checkpoint/resume/notebook/import on synthetic data. Not a research result.
+params:
+  lr: 0.1
+  batch_size: 64
+modes:
+  smoke:
+    n_samples: 2000
+    n_features: 16
+    steps: 300
+  full:
+    n_samples: 200000
+    n_features: 64
+    steps: 20000
+checkpoint:
+  every_steps: 50
+  every_minutes: 10
+  keep_last: 3
+budget:
+  max_wall_minutes: 660     # stop at 11 h, before Kaggle's 12 h limit
+data:
+  datasets: []
+kaggle:
+  accelerator: none
+  internet: true
+  pip_packages: []
+  weights_datasets: []

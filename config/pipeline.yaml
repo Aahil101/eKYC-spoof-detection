@@ -1,0 +1,13 @@
+# Preprocessing used by the API pipeline and by feature-extraction jobs.
+video:
+  sample_frames: 16          # evenly spaced frames for M2/M3/M5
+  rppg_fps: 30               # dense strip target for M4 (milestone 3)
+  max_seconds: 12
+  max_side: 720              # frames are downscaled so the longer side <= this
+document:
+  max_side: 2000
+  pdf_dpi: 200
+challenge:
+  duration_ms: 7000
+  steps: 3                   # number of random prompts per session
+  digits_len: 3

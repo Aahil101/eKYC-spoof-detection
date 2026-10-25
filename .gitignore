@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
+
+# Secrets - never commit
+.env
+kaggle.json
+data/secrets/
+
+# Data, media, models, outputs (large or sensitive)
+data/raw/
+data/processed/
+data/media/
+data/*.db
+data/*.sqlite
+models/store/
+models/bundles/*
+!models/bundles/.gitkeep
+runs/
+dist/
+experiments/results/
+kaggle/build/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# build outputs (regenerate)
+downloads/
+

@@ -1,0 +1,48 @@
+# One-command startup:  docker compose up --build        -> http://127.0.0.1:8080
+# With Postgres:         docker compose --profile postgres up --build
+#                        (and set DATABASE_URL in .env, see .env.example)
+#
+# Ports are published on 127.0.0.1 only. DEMO_MODE=1 has no admin authentication;
+# DEMO_ALLOW_ANY_CLIENT=1 is needed because requests arrive from the nginx container,
+# which is safe ONLY because nothing is published beyond localhost.
+services:
+  api:
+    build: { context: ., dockerfile: backend/Dockerfile }
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DEMO_MODE: ${DEMO_MODE:-1}
+      DEMO_ALLOW_ANY_CLIENT: ${DEMO_MODE:-1}
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////app/data/codmav.db}
+      MEDIA_DIR: /app/data/media
+      SECRETS_DIR: /app/data/secrets
+      CORS_ORIGINS: http://127.0.0.1:8080,http://localhost:8080
+    volumes:
+      - codmav-data:/app/data
+      - ./models/bundles:/app/models/bundles:ro
+    ports: ["127.0.0.1:8000:8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 10s
+      retries: 6
+
+  frontend:
+    build: { context: ./frontend }
+    depends_on:
+      api: { condition: service_healthy }
+    ports: ["127.0.0.1:8080:80"]
+
+  postgres:
+    profiles: ["postgres"]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: codmav
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-codmav}
+      POSTGRES_DB: codmav
+    volumes: [codmav-pg:/var/lib/postgresql/data]
+    ports: ["127.0.0.1:5432:5432"]
+
+volumes:
+  codmav-data:
+  codmav-pg:

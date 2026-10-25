@@ -1,0 +1,110 @@
+# Dataset registry: logical name -> Kaggle source + original dataset + license.
+#
+# RULES
+# * A Kaggle mirror does NOT change the original terms of use. We cite the original paper
+#   (docs/RESEARCH_NOTES.md) and follow the ORIGINAL license, whatever the mirror page says.
+# * `kaggle_ref` is only filled in when the page was verified to exist. `verified: false`
+#   means: pick a mirror on Kaggle, check that its file layout and size match the
+#   original, then fill in `kaggle_ref` and set verified: true (see docs/KAGGLE.md section 3).
+# * Datasets are ATTACHED to Kaggle notebooks (no download to the laptop). The optional
+#   local subset fetch (training/fetch_subset.py) is capped by `max_local_mb`.
+#
+# kind: dataset -> kernel-metadata "dataset_sources" (owner/slug)
+#       competition -> kernel-metadata "competition_sources" (slug); requires accepting the rules on Kaggle.
+
+datasets:
+  ffpp_c23:
+    module: [M2]
+    kind: dataset
+    kaggle_ref: xdxd003/ff-c23
+    kaggle_url: https://www.kaggle.com/datasets/xdxd003/ff-c23
+    verified: partial         # 17.9 GB; FaceForensics++_C23/<method>/*.mp4 incl. DeepFakeDetection; counts via dataset_audit
+    expected_counts: {original: 1000, Deepfakes: 1000, Face2Face: 1000, FaceSwap: 1000, NeuralTextures: 1000}
+    original: FaceForensics++ (Roessler et al., ICCV 2019) - RESEARCH_NOTES [14]
+    original_url: https://github.com/ondyari/FaceForensics
+    original_license: FaceForensics++ Terms of Use (access form; research use, no redistribution)
+    mirror_note: Unofficial mirror. Original FF++ terms apply; do not redistribute frames or videos.
+    mount_hint: /kaggle/input/ff-c23
+    max_local_mb: 300
+
+  dfdc:
+    module: [M2]
+    kind: competition
+    kaggle_ref: deepfake-detection-challenge
+    kaggle_url: https://www.kaggle.com/c/deepfake-detection-challenge
+    verified: true
+    original: DFDC (Dolhansky et al., arXiv 2006.07397) - RESEARCH_NOTES [16]
+    original_url: https://arxiv.org/abs/2006.07397
+    original_license: DFDC competition rules / data license (accept on the competition page first)
+    mirror_note: Official host. Attach as competition data; the full set is ~470 GB, notebooks mount it read-only.
+    mount_hint: /kaggle/input/deepfake-detection-challenge
+    max_local_mb: 300
+
+  celebdf_v2:
+    module: [M2, M5]
+    kind: dataset
+    kaggle_ref: reubensuju/celeb-df-v2
+    kaggle_url: https://www.kaggle.com/datasets/reubensuju/celeb-df-v2
+    verified: partial         # 9.97 GB; listing shows Celeb-real/*.mp4; counts via dataset_audit
+    expected_counts: {Celeb-real: 590, YouTube-real: 300, Celeb-synthesis: 5639}
+    original: Celeb-DF v2 (Li et al., CVPR 2020) - RESEARCH_NOTES [15]
+    original_url: https://github.com/yuezunli/celeb-deepfakeforensics
+    original_license: Celeb-DF Terms of Use (research only, request form)
+    mirror_note: Choose a mirror with Celeb-real / Celeb-synthesis / YouTube-real and List_of_testing_videos.txt.
+    expected_layout: [Celeb-real, Celeb-synthesis, YouTube-real, List_of_testing_videos.txt]
+    max_local_mb: 300
+
+  celeba_spoof:
+    module: [M3, M4]
+    kind: dataset
+    kaggle_ref: attentionlayer241/celeba-spoof-for-face-antispoofing
+    kaggle_url: https://www.kaggle.com/datasets/attentionlayer241/celeba-spoof-for-face-antispoofing
+    verified: partial         # 77 GB; CelebA_Spoof/Data/test/<id>/live/*.png + *_BB.txt; counts via dataset_audit
+    expected_counts: {images_total: 625537}
+    original: CelebA-Spoof (Zhang et al., ECCV 2020) - RESEARCH_NOTES [30]
+    original_url: https://github.com/ZhangYuanhan-AI/CelebA-Spoof
+    original_license: CelebA-Spoof agreement (non-commercial research only)
+    mirror_note: Prefer a mirror that keeps metas/intra_test/*.json label files and spoof-type attributes.
+    expected_layout: [Data/train, Data/test, metas]
+    max_local_mb: 200
+
+  sidtd:
+    module: [M1]
+    kind: dataset
+    kaggle_ref: null
+    verified: false
+    original: SIDTD (Scientific Data 2024) - RESEARCH_NOTES [7]
+    original_url: https://github.com/Oriolrt/SIDTD_Dataset
+    original_license: CC-BY-4.0 (attribution required)
+    mirror_note: If no mirror exists, upload it yourself as a private Kaggle dataset (allowed by CC-BY-4.0 with attribution).
+    max_local_mb: 200
+
+  df40:
+    module: [M2, N]
+    kind: dataset
+    kaggle_ref: goodboyxdd/dataset-df40-slice
+    kaggle_url: https://www.kaggle.com/datasets/goodboyxdd/dataset-df40-slice
+    verified: partial         # a SLICE (13.9 GB, PNG frames, few downloads); which techniques it covers: dataset_audit
+    original: DF40 (Yan et al., NeurIPS 2024 D&B) - RESEARCH_NOTES [18]
+    original_url: https://github.com/SCLBD/DeepfakeBench
+    original_license: see DF40 / DeepfakeBench README
+    mirror_note: Needed for leave-one-generator-out (E6). If no Kaggle mirror, fall back to FF++ leave-one-method-out.
+    max_local_mb: 0
+
+  # Institution-gated, later maybe (PES University affiliation): not required by any milestone.
+  doctamper: {module: [M1], kind: dataset, kaggle_ref: null, verified: false, gated: true,
+              original_license: "non-commercial, institutional application", max_local_mb: 0}
+  oulu_npu: {module: [M3, M4], kind: dataset, kaggle_ref: null, verified: false, gated: true,
+             original_license: "EULA, institutional", max_local_mb: 0}
+
+# Pretrained weights and pip wheels for internet-OFF notebooks. These are Kaggle datasets that
+# YOU create once (exact steps in docs/KAGGLE.md section 4).
+assets:
+  codmav-src:            {purpose: "repo source zip (built by python -m training.package_src)"}
+  codmav-wheels:         {purpose: "pip wheels for packages missing from the Kaggle image (requirements/kaggle-extra.txt)"}
+  codmav-weights-openclip-vitb16: {purpose: "open_clip ViT-B-16 'openai' checkpoint (open_clip_pytorch_model.bin)"}
+  codmav-weights-mediapipe:       {purpose: "face_landmarker.task (MediaPipe Face Landmarker, Apache-2.0)"}
+  codmav-weights-insightface:     {purpose: "buffalo_l model pack (InsightFace; NON-COMMERCIAL research only)"}
+  codmav-weights-facenet:         {purpose: "facenet-pytorch vggface2 weights (alternative face matcher)"}
+  codmav-weights-vosk:            {purpose: "vosk-model-small-en-us-0.15 (offline ASR for read-digits)"}
+  codmav-weights-timm-effnetb4:   {purpose: "timm efficientnet_b4 ImageNet weights (SBI plug-in)"}

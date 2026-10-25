@@ -1,0 +1,18 @@
+job: m2_sbi_effnet
+run_name: m2_sbi_effnetb4
+implemented: false        # optional heavy plug-in, Kaggle GPU only
+module: M2
+seed: 0
+description: SBI (RESEARCH_NOTES [20]) EfficientNet-B4 fine-tune. Kaggle-only plug-in; not part of the CPU default.
+params: {backbone: efficientnet_b4, image_size: 380, epochs: 20, batch_size: 16, lr: 0.001}
+modes:
+  smoke: {epochs: 1, max_videos_per_class: 4, image_size: 128, device: cpu}
+  full: {device: cuda}
+checkpoint: {every_steps: 500, every_minutes: 15, keep_last: 2}
+budget: {max_wall_minutes: 660}
+data: {datasets: [ffpp_c23]}
+kaggle:
+  accelerator: gpu
+  internet: false
+  pip_packages: [timm, mediapipe]
+  weights_datasets: [codmav-weights-timm-effnetb4]
