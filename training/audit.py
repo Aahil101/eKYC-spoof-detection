@@ -32,13 +32,19 @@ def _find_mount(slug: str, roots: list[Path]) -> Path | None:
     return None
 
 
-def _has_entry(root: Path, name: str, max_depth: int = 4) -> str | None:
-    for dirpath, dirnames, filenames in os.walk(root):
-        depth = len(Path(dirpath).relative_to(root).parts)
-        if name in dirnames or name in filenames:
-            return str(Path(dirpath, name).relative_to(root))
-        if depth >= max_depth:
-            dirnames[:] = []
+def _has_entry(root: Path, name: str, max_depth: int = 3) -> str | None:
+    """Breadth-first, depth-bounded search for a file/dir name (cheap on big mounts)."""
+    level = [root]
+    for _ in range(max_depth + 1):
+        nxt = []
+        for d in level:
+            if (d / name).exists():
+                return str((d / name).relative_to(root))
+            try:
+                nxt += [Path(e.path) for e in os.scandir(d) if e.is_dir(follow_symlinks=False)][:200]
+            except OSError:
+                pass
+        level = nxt
     return None
 
 

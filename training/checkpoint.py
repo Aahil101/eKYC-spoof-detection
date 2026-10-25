@@ -105,7 +105,12 @@ def find_resume_checkpoint(run_name: str, own_ckpt_dir: Path, input_roots: list[
     dirs = [own_ckpt_dir]
     for root in input_roots:
         if root.is_dir():
-            dirs += [p for p in root.glob(f"**/{run_name}/checkpoints") if p.is_dir()]
+            # Bounded depth: <root>/<slug>/runs/<run>, <root>/datasets|kernels/<owner>/<slug>/runs/<run>, ...
+            # (never '**': attached datasets can hold 100k+ files)
+            for d in range(0, 5):
+                prefix = "*/" * d
+                dirs += [p for p in root.glob(f"{prefix}{run_name}/checkpoints") if p.is_dir()]
+    dirs = list(dict.fromkeys(dirs))
     for d in dirs:
         p = CheckpointManager.latest_in(d)
         if p is not None:

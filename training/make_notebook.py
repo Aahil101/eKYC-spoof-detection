@@ -97,14 +97,18 @@ print('internet:', ONLINE)
 if CODE.exists():
     shutil.rmtree(CODE)
 def find_src():
-    for pat in ('/kaggle/input/**/codmav_src.zip',):
-        hits = glob.glob(pat, recursive=True)
+    # Bounded depth only: a recursive glob over /kaggle/input walks every attached dataset (100k+ files).
+    # Mount layouts: /kaggle/input/<slug>/ and /kaggle/input/datasets/<owner>/<slug>/ (+ auto-extracted zip dir)
+    pats = [f'/kaggle/input/{"*/" * d}codmav_src.zip' for d in range(1, 5)]
+    for pat in pats:
+        hits = glob.glob(pat)
         if hits:
             return 'zip', hits[0]
-    for marker in glob.glob('/kaggle/input/**/training/run.py', recursive=True):
-        root = pathlib.Path(marker).parents[1]
-        if (root / 'ml').is_dir() and (root / 'backend').is_dir():
-            return 'dir', str(root)
+    for d in range(1, 5):
+        for marker in glob.glob(f'/kaggle/input/{"*/" * d}training/run.py'):
+            root = pathlib.Path(marker).parents[1]
+            if (root / 'ml').is_dir() and (root / 'backend').is_dir():
+                return 'dir', str(root)
     return None, None
 kind, src = find_src()
 if kind == 'zip':
@@ -124,7 +128,7 @@ os.chdir(CODE)
 # 2) Dependencies (torch / torchvision / numpy are preinstalled on Kaggle images)
 PKGS = {pkgs!r}
 base = 'pydantic pydantic-settings PyYAML structlog av'
-wheels = glob.glob('/kaggle/input/**/wheels', recursive=True)
+wheels = [p for d in range(1, 4) for p in glob.glob(f'/kaggle/input/{{"*/" * d}}wheels')]
 if ONLINE:
     sh(f'pip install -q {{base}} {{PKGS}}'.strip())
 elif wheels:
@@ -134,7 +138,7 @@ else:
 """),
         _code("""
 # 3) Pretrained weights from attached datasets -> expected cache locations
-os.environ['CODMAV_WEIGHTS_DIRS'] = os.pathsep.join(glob.glob('/kaggle/input/**/codmav-weights-*', recursive=True))
+os.environ['CODMAV_WEIGHTS_DIRS'] = os.pathsep.join(p for d in range(0, 3) for p in glob.glob(f'/kaggle/input/{"*/" * d}codmav-weights-*'))
 print('weights dirs:', os.environ['CODMAV_WEIGHTS_DIRS'] or '(none attached)')
 os.environ['CODMAV_INPUT_ROOTS'] = '/kaggle/input'
 os.environ['CODMAV_OUTPUT_ROOT'] = '/kaggle/working/runs'

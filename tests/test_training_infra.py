@@ -139,6 +139,7 @@ def test_notebook_generation(tmp_path):
     code = "\n".join("".join(c["source"]) for c in nb["cells"] if c["cell_type"] == "code")
     assert "--mode full --resume auto" in code and "training/configs/m2_clip_probe.yaml" in code
     assert "--no-index --find-links" in code
+    assert "recursive=True" not in code and "**" not in code     # never walk all of /kaggle/input
     compile(code, "nb", "exec")       # code cells are valid Python
 
     out2 = generate(SELFTEST, "me", tmp_path)
