@@ -151,11 +151,53 @@ def test_notebook_generation(tmp_path):
 
 def test_competition_source(tmp_path):
     cfg = yaml.safe_load(SELFTEST.read_text())
-    cfg["data"]["datasets"] = ["dfdc"]
+    cfg["data"]["datasets"] = ["dfdc", "sidtd"]
     p = tmp_path / "c.yaml"
     p.write_text(yaml.safe_dump(cfg))
     meta = json.loads((generate(p, "me", tmp_path) / "kernel-metadata.json").read_text())
     assert meta["competition_sources"] == ["deepfake-detection-challenge"]
+    assert meta["kernel_sources"] == ["aahil1011/codmav-fetch-sidtd-templates"]
+
+
+def test_fetch_archive_job(tmp_path, monkeypatch):
+    """Serves a zip over local HTTP; checks hash, extraction, zip-slip guard and manifest."""
+    import hashlib
+    import http.server
+    import io
+    import threading
+    import zipfile as zf
+
+    buf = io.BytesIO()
+    with zf.ZipFile(buf, "w") as z:
+        z.writestr("templates/Images/reals/a.jpg", b"x" * 10)
+        z.writestr("templates/Images/fakes/b.jpg", b"y" * 10)
+    payload = buf.getvalue()
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    cfg = yaml.safe_load((REPO_ROOT / "training" / "configs" / "fetch_sidtd.yaml").read_text())
+    cfg["params"]["url"] = f"http://127.0.0.1:{srv.server_address[1]}/templates.zip"
+    cfg["params"]["sha256"] = hashlib.sha256(payload).hexdigest()
+    cfg["modes"]["smoke"] = {"max_bytes": 0, "extract": True}
+    p = tmp_path / "f.yaml"
+    p.write_text(yaml.safe_dump(cfg))
+    monkeypatch.setenv("CODMAV_FETCH_DEST", str(tmp_path / "data"))
+    monkeypatch.setenv("CODMAV_INPUT_ROOTS", "")
+    m = run(p, "smoke", resume="none", out_root=tmp_path / "runs")
+    srv.shutdown()
+    assert m["status"] == "completed" and m["metrics"]["extracted_files"] == 2
+    assert (tmp_path / "data" / "sidtd" / "templates" / "Images" / "fakes" / "b.jpg").exists()
+    assert "CC-BY-4.0" in (tmp_path / "data" / "sidtd" / "LICENSE_NOTICE.txt").read_text()
 
 
 def test_package_src_excludes_secrets_and_data(tmp_path):

@@ -36,9 +36,9 @@ def _code(text: str) -> dict:
 
 
 def resolve_sources(cfg: dict, owner: str, registry: dict,
-                    repo_url: str | None = None) -> tuple[list[str], list[str], list[str]]:
-    """Return (dataset_sources, competition_sources, warnings)."""
-    ds, comp, warn = [], [], []
+                    repo_url: str | None = None) -> tuple[list[str], list[str], list[str], list[str]]:
+    """Return (dataset_sources, competition_sources, kernel_sources, warnings)."""
+    ds, comp, kern, warn = [], [], [], []
     for name in (cfg.get("data") or {}).get("datasets", []):
         entry = registry["datasets"].get(name)
         if entry is None:
@@ -47,7 +47,7 @@ def resolve_sources(cfg: dict, owner: str, registry: dict,
             warn.append(f"dataset {name!r} has no verified kaggle_ref; add it in the Kaggle UI "
                         f"(Add Input) or fill training/datasets.yaml")
             continue
-        (comp if entry["kind"] == "competition" else ds).append(entry["kaggle_ref"])
+        {"competition": comp, "kernel_output": kern}.get(entry["kind"], ds).append(entry["kaggle_ref"])
     kg = cfg.get("kaggle") or {}
     for w in kg.get("weights_datasets", []):
         ds.append(f"{owner}/{w}")
@@ -55,7 +55,7 @@ def resolve_sources(cfg: dict, owner: str, registry: dict,
         ds += [f"{owner}/codmav-src", f"{owner}/codmav-wheels"]
     elif not repo_url:
         ds.append(f"{owner}/codmav-src")     # no git repo to clone -> code comes from the source dataset
-    return sorted(set(ds)), sorted(set(comp)), warn
+    return sorted(set(ds)), sorted(set(comp)), sorted(set(kern)), warn
 
 
 def build_notebook(cfg: dict, config_rel: str, repo_url: str | None, ref: str) -> dict:
@@ -160,7 +160,7 @@ shutil.rmtree(CODE, ignore_errors=True)   # code is reproducible from git sha in
 def generate(config_path: Path, owner: str, out_root: Path, repo_url: str | None = None, ref: str = "main") -> Path:
     cfg = load_job_config(config_path, "full")
     registry = yaml.safe_load(DATASETS_YAML.read_text(encoding="utf-8"))
-    ds, comp, warnings = resolve_sources(cfg, owner, registry, repo_url)
+    ds, comp, kern, warnings = resolve_sources(cfg, owner, registry, repo_url)
     kg = cfg.get("kaggle") or {}
     try:
         config_rel = config_path.resolve().relative_to(REPO_ROOT).as_posix()
@@ -183,7 +183,7 @@ def generate(config_path: Path, owner: str, out_root: Path, repo_url: str | None
         "enable_internet": bool(kg.get("internet", True)),
         "dataset_sources": ds,
         "competition_sources": comp,
-        "kernel_sources": [],
+        "kernel_sources": kern,
     }
     (out / "kernel-metadata.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     for w in warnings:

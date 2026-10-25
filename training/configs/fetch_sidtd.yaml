@@ -1,0 +1,27 @@
+job: fetch_archive
+run_name: fetch_sidtd_templates
+implemented: true
+seed: 0
+description: >
+  Download SIDTD templates.zip from the original host (CVC-UAB) inside Kaggle and keep the
+  extracted files as notebook output for other notebooks (kernel_sources). CC-BY-4.0.
+params:
+  name: sidtd
+  url: http://datasets.cvc.uab.es/SIDTD/templates.zip
+  sha256: null              # no published hash; the computed hash is recorded in fetch_manifest.json
+  license: CC-BY-4.0
+  license_notice: |
+    SIDTD - Synthetic dataset of ID and Travel Documents (Scientific Data, 2024).
+    Source: https://github.com/Oriolrt/SIDTD_Dataset  (templates.zip from http://datasets.cvc.uab.es/SIDTD/)
+    License: CC-BY-4.0. Re-hosted unmodified for research; cite the original paper.
+modes:
+  smoke: {max_bytes: 2000000, extract: false}
+  full: {max_bytes: 0, extract: true}
+checkpoint: {every_steps: 1000000, every_minutes: 1000, keep_last: 1}
+budget: {max_wall_minutes: 120}
+data: {datasets: []}
+kaggle:
+  accelerator: none
+  internet: true
+  pip_packages: []
+  weights_datasets: []

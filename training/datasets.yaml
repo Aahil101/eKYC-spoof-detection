@@ -70,14 +70,15 @@ datasets:
 
   sidtd:
     module: [M1]
-    kind: dataset
-    kaggle_ref: null
-    verified: false
+    kind: kernel_output         # produced by notebook aahil1011/codmav-fetch-sidtd-templates (training/configs/fetch_sidtd.yaml)
+    kaggle_ref: aahil1011/codmav-fetch-sidtd-templates
+    kaggle_url: https://www.kaggle.com/code/aahil1011/codmav-fetch-sidtd-templates
+    verified: partial           # fetched from the original CVC-UAB host; sha256 + counts in fetch_manifest.json
     original: SIDTD (Scientific Data 2024) - RESEARCH_NOTES [7]
     original_url: https://github.com/Oriolrt/SIDTD_Dataset
     original_license: CC-BY-4.0 (attribution required)
-    mirror_note: If no mirror exists, upload it yourself as a private Kaggle dataset (allowed by CC-BY-4.0 with attribution).
-    max_local_mb: 200
+    mirror_note: No Kaggle mirror exists (searched 2026-10-26); re-hosted as private notebook output with LICENSE_NOTICE.txt.
+    max_local_mb: 0
 
   df40:
     module: [M2, N]
