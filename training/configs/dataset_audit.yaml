@@ -4,7 +4,8 @@ implemented: true
 seed: 0
 description: Count files/sizes/layout of attached Kaggle mirrors to verify them against the original datasets.
 params:
-  datasets: [ffpp_c23, celebdf_v2, celeba_spoof, df40]
+  datasets: [celebdf_v2, ffpp_c23, df40, celeba_spoof]   # small/fast first; CelebA-Spoof (~625k files) last
+  per_dataset_minutes: 25
 modes:
   smoke: {}
   full: {}

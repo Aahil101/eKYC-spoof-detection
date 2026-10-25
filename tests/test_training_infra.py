@@ -210,6 +210,21 @@ def test_package_src_excludes_secrets_and_data(tmp_path):
                    for n in names)
 
 
+def test_audit_tree_counts_and_layout(tmp_path):
+    from training.audit import _find_mount, _has_entry, audit_tree
+    root = tmp_path / "datasets" / "owner" / "celeb-df-v2"
+    for sub, n in (("Celeb-real", 3), ("Celeb-synthesis", 5)):
+        (root / sub).mkdir(parents=True)
+        for i in range(n):
+            (root / sub / f"id{i}.mp4").write_bytes(b"x")
+    (root / "List_of_testing_videos.txt").write_text("x")
+    assert _find_mount("celeb-df-v2", [tmp_path]) == root
+    r = audit_tree(root, depth=1)
+    assert r["n_files"] == 9 and r["files_per_dir_depth1"]["Celeb-synthesis"] == 5 and not r["partial"]
+    assert r["extensions"][".mp4"] == 8
+    assert _has_entry(root, "Celeb-real") == "Celeb-real"
+
+
 def test_fetch_subset_plan_respects_caps():
     files = [("a.mp4", 50_000_000), ("b.mp4", 60_000_000), ("c.json", 10), ("d.mp4", 300_000_000)]
     assert plan(files, "*.mp4", 10, 120) == ["a.mp4", "b.mp4"]

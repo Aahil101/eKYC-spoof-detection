@@ -160,12 +160,12 @@ Decision (milestone 2): **Kaggle is the primary data source.** Datasets are atta
 
 | Logical name | Kaggle URL | Original dataset (paper) | Original license / access | Mirror note | Bundled in repo? |
 |---|---|---|---|---|---|
-| `ffpp_c23` | https://www.kaggle.com/datasets/xdxd003/ff-c23 (page found 2026-10-26) | FaceForensics++ [14] | FF++ Terms of Use (access form, research, no redistribution) | Unofficial mirror; original terms apply; contents still to be checked against the original | No |
+| `ffpp_c23` | https://www.kaggle.com/datasets/xdxd003/ff-c23 (17.9 GB; `FaceForensics++_C23/<method>/*.mp4`) | FaceForensics++ [14] | FF++ Terms of Use (access form, research, no redistribution) | Unofficial mirror; original terms apply; file counts via `dataset_audit` notebook | No |
 | `dfdc` | https://www.kaggle.com/c/deepfake-detection-challenge | DFDC [16] | Competition data rules (accept on Kaggle) | Official host (~470 GB, mounted read-only) | No |
-| `celebdf_v2` | unverified | Celeb-DF v2 [15] | Research-only terms (request form) | Must contain Celeb-real / Celeb-synthesis / YouTube-real + test list | No |
-| `celeba_spoof` | unverified | CelebA-Spoof [30] | Non-commercial research agreement | Must keep `metas/` label + attribute files | No |
-| `sidtd` | unverified (or self-upload, private) | SIDTD [7] | CC-BY-4.0 | Re-hosting allowed with attribution | No |
-| `df40` | unverified | DF40 [18] | See DeepfakeBench/DF40 README | If unavailable, E6 uses FF++ leave-one-method-out | No |
+| `celebdf_v2` | https://www.kaggle.com/datasets/reubensuju/celeb-df-v2 (9.97 GB; `Celeb-real/*.mp4`, …) | Celeb-DF v2 [15] | Research-only terms (request form) | Unofficial mirror; original terms apply; expected 590 / 300 / 5,639 videos (paper), checked by audit | No |
+| `celeba_spoof` | https://www.kaggle.com/datasets/attentionlayer241/celeba-spoof-for-face-antispoofing (77 GB; `CelebA_Spoof/Data/<split>/<id>/live|spoof/*.png` + `_BB.txt`) | CelebA-Spoof [30] | Non-commercial research agreement | Unofficial mirror; original terms apply; expected 625,537 images (paper), checked by audit | No |
+| `sidtd` | private notebook output https://www.kaggle.com/code/aahil1011/codmav-fetch-sidtd-templates (fetched 2026-10-26 from `http://datasets.cvc.uab.es/SIDTD/templates.zip`, 1,273,966,468 B, sha256 `e21a1c8b…67c0f`, 2,222 JPG + 1,232 JSON) | SIDTD [7] | CC-BY-4.0 | No Kaggle mirror existed; re-hosted unmodified with `LICENSE_NOTICE.txt` | No |
+| `df40` | https://www.kaggle.com/datasets/goodboyxdd/dataset-df40-slice (13.9 GB, PNG frames) | DF40 [18] | See DeepfakeBench/DF40 README | **Slice only**, low-download third-party upload; technique coverage checked by audit. If insufficient, E6 uses FF++ leave-one-method-out | No |
 | `doctamper` | institution-gated (later, via PES University) | DocTamper [5] | Non-commercial, institutional application | Not required by any milestone | No |
 | `oulu_npu` | institution-gated (later) | OULU-NPU [28] | EULA (institutional) | Not required; E7-S6 uses OULU only if obtained | No |
 | MIDV-2020 | not used directly (SIDTD is derived from it) | MIDV-2020 [6] | see dataset page (not verified) | — | No |

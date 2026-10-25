@@ -2,7 +2,29 @@
 
 All training runs on Kaggle (T4/P100, about 30 GPU-h/week, 12 h per session). Datasets are **attached to notebooks online**, so nothing large is downloaded to the laptop. The laptop only runs CPU smoke tests and the demo app.
 
-## 0. Your first run (account `aahil1011`), about 10 minutes
+## 0. Status of account `aahil1011` (done 2026-10-26)
+
+| Item | Kaggle | State |
+|---|---|---|
+| Source dataset | https://www.kaggle.com/datasets/aahil1011/codmav-src | v2 (git `27ff19c`) |
+| Selftest notebook | https://www.kaggle.com/code/aahil1011/codmav-selftest | COMPLETE; output imported as bundle `0.0.1+8b7f7c43b6`, round trip verified (Kaggle image: Python 3.13) |
+| SIDTD fetch | https://www.kaggle.com/code/aahil1011/codmav-fetch-sidtd-templates | COMPLETE; 1.27 GB from original host, 3,454 files |
+| Dataset audit | https://www.kaggle.com/code/aahil1011/codmav-dataset-audit | see `docs/DATASET_AUDIT.md` |
+
+The CLI authenticates from `%USERPROFILE%\.kaggle\access_token`, outside the repo. On Windows, pass **absolute** paths to `kaggle datasets create/version -p` and `kaggle kernels push -p`. Relative paths with `/` fail in kaggle 2.2.5.
+
+Routine loop after code changes:
+```
+git commit ...
+python -m training.package_src --owner aahil1011
+kaggle datasets version -p <ABS>\dist\codmav-src -m "<git short sha>"
+python -m training.make_notebook --config training/configs/<job>.yaml --owner aahil1011
+kaggle kernels push -p <ABS>\kaggle\build\<run_name>
+kaggle kernels output aahil1011/codmav-<run-slug> -p downloads\<x> --file-pattern "runs/.*/(artifacts/.*|run_manifest.json)"
+python -m training.import_weights --run-dir downloads\<x>\runs\<run_name> --module Mx --bundle <name>
+```
+
+## 0b. First run walkthrough (kept for reference)
 
 The laptop has already prepared `dist/codmav-src/` (source dataset) and `kaggle/build/selftest/` (notebook plus metadata). The selftest notebook was executed in a Kaggle-like Docker container (`scripts/simulate_kaggle.py`) and finished with `status: completed`.
 

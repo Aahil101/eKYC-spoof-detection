@@ -42,24 +42,38 @@ def _has_entry(root: Path, name: str, max_depth: int = 4) -> str | None:
     return None
 
 
-def audit_tree(root: Path, depth: int = 4) -> dict:
-    n_files, total = 0, 0
+def audit_tree(root: Path, depth: int = 4, time_cap_s: float = 0.0) -> dict:
+    """Count files per directory using scandir (no per-file stat: slow on Kaggle's network FS).
+
+    Sizes come from the Kaggle API listing instead. Stops at `time_cap_s` and marks partial.
+    """
+    import time
+    t0 = time.monotonic()
+    n_files = 0
     ext = Counter()
     per_dir: dict[str, int] = defaultdict(int)
-    for dirpath, _, filenames in os.walk(root):
-        rel = Path(dirpath).relative_to(root)
-        key = "/".join(rel.parts[:depth]) or "."
-        for f in filenames:
-            n_files += 1
-            try:
-                total += os.path.getsize(os.path.join(dirpath, f))
-            except OSError:
-                pass
-            ext[Path(f).suffix.lower() or "<none>"] += 1
-            per_dir[key] += 1
-    top_dirs = dict(sorted(per_dir.items(), key=lambda kv: -kv[1])[:200])
-    return {"n_files": n_files, "total_bytes": total, "extensions": dict(ext.most_common(20)),
-            "files_per_dir_depth%d" % depth: top_dirs}
+    stack = [root]
+    partial = False
+    while stack:
+        if time_cap_s and time.monotonic() - t0 > time_cap_s:
+            partial = True
+            break
+        d = stack.pop()
+        try:
+            with os.scandir(d) as it:
+                for e in it:
+                    if e.is_dir(follow_symlinks=False):
+                        stack.append(Path(e.path))
+                    else:
+                        n_files += 1
+                        ext[os.path.splitext(e.name)[1].lower() or "<none>"] += 1
+                        rel = Path(d).relative_to(root)
+                        per_dir["/".join(rel.parts[:depth]) or "."] += 1
+        except OSError:
+            continue
+    top_dirs = dict(sorted(per_dir.items(), key=lambda kv: -kv[1])[:300])
+    return {"n_files": n_files, "partial": partial, "seconds": round(time.monotonic() - t0, 1),
+            "extensions": dict(ext.most_common(20)), "files_per_dir_depth%d" % depth: top_dirs}
 
 
 @register("dataset_audit")
@@ -76,11 +90,13 @@ def dataset_audit(cfg: dict, ctx) -> dict:
         if mount is None:
             entry["error"] = "not attached / not found"
         else:
-            entry.update(audit_tree(mount))
+            entry.update(audit_tree(mount, time_cap_s=float(cfg["params"].get("per_dataset_minutes", 20)) * 60))
             entry["expected_layout"] = {x: _has_entry(mount, x) for x in e.get("expected_layout", [])}
             entry["expected_counts"] = e.get("expected_counts", {})
         report["datasets"][name] = entry
-        ctx.log("audited", dataset=name, n_files=entry.get("n_files"), mount=entry["mount"])
-    ctx.save_artifact("dataset_audit.json", json.dumps(report, indent=2).encode())
+        ctx.log("audited", dataset=name, n_files=entry.get("n_files"), partial=entry.get("partial"),
+                mount=entry["mount"])
+        # incremental: a dead or slow session still leaves results for finished datasets
+        ctx.save_artifact("dataset_audit.json", json.dumps(report, indent=2).encode())
     return {"audited": list(report["datasets"]),
             "missing": [k for k, v in report["datasets"].items() if v.get("error")]}
