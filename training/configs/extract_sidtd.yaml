@@ -1,0 +1,21 @@
+job: extract_features
+run_name: feats_sidtd
+implemented: true
+seed: 0
+description: "SIDTD templates (reals + fakes)"
+params:
+  dataset: sidtd
+  shard_size: 500
+  workers: 4
+  video: {sample_frames: 16, max_seconds: 12, max_side: 720, dense_side: 320, dense_seconds: 8, dense_fps: 15, arc_frames: 4}
+modes:
+  smoke: {max_items: 20, workers: 1, device: cpu}
+  full: {}
+checkpoint: {every_steps: 1000000, every_minutes: 1000, keep_last: 1}
+budget: {max_wall_minutes: 690}
+data: {datasets: [sidtd]}
+kaggle:
+  accelerator: none
+  internet: true
+  pip_packages: [mediapipe==1.1.1, open_clip_torch==3.3.0, onnxruntime==1.31.0, av==19.0.2]
+  weights_datasets: []

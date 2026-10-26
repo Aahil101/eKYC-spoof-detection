@@ -36,7 +36,7 @@ def test_mode_merge():
 
 def test_unimplemented_job_exits_clearly(tmp_path):
     with pytest.raises(SystemExit, match="not implemented"):
-        run(REPO_ROOT / "training" / "configs" / "m2_clip_probe.yaml", "smoke", out_root=tmp_path)
+        run(REPO_ROOT / "training" / "configs" / "m2_sbi_effnet.yaml", "smoke", out_root=tmp_path)
 
 
 def test_crash_then_resume_matches_uninterrupted(tmp_path, monkeypatch):
@@ -129,18 +129,22 @@ def test_import_rejects_corrupt_download(tmp_path, monkeypatch):
 
 
 def test_notebook_generation(tmp_path):
-    out = generate(REPO_ROOT / "training" / "configs" / "m2_clip_probe.yaml", "me", tmp_path,
+    out = generate(REPO_ROOT / "training" / "configs" / "m2_sbi_effnet.yaml", "me", tmp_path,
                    repo_url="https://github.com/me/codmav.git")
     meta = json.loads((out / "kernel-metadata.json").read_text())
     assert meta["enable_gpu"] is True and meta["enable_internet"] is False
     assert "xdxd003/ff-c23" in meta["dataset_sources"]
-    assert {"me/codmav-src", "me/codmav-wheels", "me/codmav-weights-openclip-vitb16"} <= set(meta["dataset_sources"])
+    assert {"me/codmav-src", "me/codmav-wheels", "me/codmav-weights-timm-effnetb4"} <= set(meta["dataset_sources"])
     nb = json.loads((out / meta["code_file"]).read_text())
     code = "\n".join("".join(c["source"]) for c in nb["cells"] if c["cell_type"] == "code")
-    assert "--mode full --resume auto" in code and "training/configs/m2_clip_probe.yaml" in code
+    assert "--mode full --resume auto" in code and "training/configs/m2_sbi_effnet.yaml" in code
     assert "--no-index --find-links" in code
     assert "recursive=True" not in code and "**" not in code     # never walk all of /kaggle/input
     compile(code, "nb", "exec")       # code cells are valid Python
+
+    th = json.loads((generate(REPO_ROOT / "training" / "configs" / "train_heads.yaml", "aahil1011", tmp_path / "t")
+                     / "kernel-metadata.json").read_text())
+    assert "aahil1011/codmav-feats-ffpp" in th["kernel_sources"] and len(th["kernel_sources"]) == 5
 
     out2 = generate(SELFTEST, "me", tmp_path)
     meta2 = json.loads((out2 / "kernel-metadata.json").read_text())

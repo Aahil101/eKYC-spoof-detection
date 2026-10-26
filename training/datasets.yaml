@@ -92,6 +92,26 @@ datasets:
     mirror_note: Needed for leave-one-generator-out (E6). If no Kaggle mirror, fall back to FF++ leave-one-method-out.
     max_local_mb: 0
 
+  msu_mfsd:
+    module: [M3, M4]
+    kind: dataset
+    kaggle_ref: minhnhat18/msu-mfsd-dataset-gpat
+    kaggle_url: https://www.kaggle.com/datasets/minhnhat18/msu-mfsd-dataset-gpat
+    verified: true            # listing 2026-10-26: scene01/real 70 videos + 70 .face, attack 210 + 210 (= 280 clips, 35 clients, README);
+                              # official train_sub_list (15 subjects) / test_sub_list (20 subjects)
+    original: MSU-MFSD (Wen, Han, Jain, IEEE TIFS 2015) - RESEARCH_NOTES [34]
+    original_url: http://biometrics.cse.msu.edu/Publications/Databases/MSUMobileFaceSpoofing/
+    original_license: MSU MFSD database agreement (research use, request form)
+    mirror_note: Unofficial mirror (copied from a Google Drive); original agreement applies. Only video PAD set on Kaggle.
+    max_local_mb: 0
+
+  # Feature shards produced by the extraction notebooks (milestone 3), consumed by train_heads.
+  feats_ffpp: {module: [M2], kind: kernel_output, kaggle_ref: aahil1011/codmav-feats-ffpp, verified: true, max_local_mb: 0}
+  feats_celebdf: {module: [M2, M5], kind: kernel_output, kaggle_ref: aahil1011/codmav-feats-celebdf, verified: true, max_local_mb: 0}
+  feats_msu: {module: [M3, M4], kind: kernel_output, kaggle_ref: aahil1011/codmav-feats-msu, verified: true, max_local_mb: 0}
+  feats_celebaspoof: {module: [M3], kind: kernel_output, kaggle_ref: aahil1011/codmav-feats-celebaspoof, verified: true, max_local_mb: 0}
+  feats_sidtd: {module: [M1], kind: kernel_output, kaggle_ref: aahil1011/codmav-feats-sidtd, verified: true, max_local_mb: 0}
+
   # Institution-gated, later maybe (PES University affiliation): not required by any milestone.
   doctamper: {module: [M1], kind: dataset, kaggle_ref: null, verified: false, gated: true,
               original_license: "non-commercial, institutional application", max_local_mb: 0}

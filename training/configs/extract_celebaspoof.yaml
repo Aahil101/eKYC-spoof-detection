@@ -1,0 +1,23 @@
+job: extract_features
+run_name: feats_celebaspoof
+implemented: true
+seed: 0
+description: "CelebA-Spoof subset: 1500/spoof type (4500 live) train + 6000 test images"
+params:
+  dataset: celeba_spoof
+  shard_size: 1000
+  workers: 4
+  per_type_train: 1500
+  n_test: 6000
+  video: {sample_frames: 16, max_seconds: 12, max_side: 720, dense_side: 320, dense_seconds: 8, dense_fps: 15, arc_frames: 4}
+modes:
+  smoke: {max_items: 40, workers: 1, device: cpu}
+  full: {}
+checkpoint: {every_steps: 1000000, every_minutes: 1000, keep_last: 1}
+budget: {max_wall_minutes: 690}
+data: {datasets: [celeba_spoof]}
+kaggle:
+  accelerator: none
+  internet: true
+  pip_packages: [mediapipe==1.1.1, open_clip_torch==3.3.0, onnxruntime==1.31.0, av==19.0.2]
+  weights_datasets: []

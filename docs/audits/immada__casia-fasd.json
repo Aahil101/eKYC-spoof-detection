@@ -1,0 +1,26 @@
+{
+  "ref": "immada/casia-fasd",
+  "complete": false,
+  "pages": 400,
+  "n_files": 80000,
+  "total_bytes": 1405220830,
+  "extensions": {
+    ".png": 80000
+  },
+  "per_dir": {
+    "casia-fasd/test/live": {
+      "files": 10128,
+      "bytes": 181941986
+    },
+    "casia-fasd/test/spoof": {
+      "files": 55658,
+      "bytes": 962406712
+    },
+    "casia-fasd/train/live": {
+      "files": 14214,
+      "bytes": 260872132
+    }
+  },
+  "seconds": 566.3,
+  "method": "Kaggle API file listing (metadata only)"
+}

@@ -1,0 +1,20 @@
+job: train_heads
+run_name: train_heads
+implemented: true
+module: ALL
+seed: 0
+description: "Train + calibrate M1-M5 heads on features from the five extraction notebooks (attached as kernel outputs)."
+params:
+  modules: [M1, M2, M3, M4, M5]
+modes:
+  smoke: {}
+  full: {}
+checkpoint: {every_steps: 1000000, every_minutes: 1000, keep_last: 1}
+budget: {max_wall_minutes: 240}
+data:
+  datasets: [feats_ffpp, feats_celebdf, feats_msu, feats_celebaspoof, feats_sidtd]
+kaggle:
+  accelerator: none
+  internet: true
+  pip_packages: [onnxruntime==1.31.0]
+  weights_datasets: []

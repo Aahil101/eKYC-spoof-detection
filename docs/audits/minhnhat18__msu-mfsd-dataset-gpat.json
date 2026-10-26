@@ -1,0 +1,32 @@
+{
+  "ref": "minhnhat18/msu-mfsd-dataset-gpat",
+  "complete": true,
+  "pages": 4,
+  "n_files": 623,
+  "total_bytes": 22264067920,
+  "extensions": {
+    ".face": 280,
+    ".mp4": 140,
+    ".mov": 140,
+    ".txt": 33,
+    ".ffpreset": 7,
+    ".m": 3,
+    ".exe": 3,
+    ".001": 1,
+    ".002": 1,
+    ".003": 1,
+    ".004": 1,
+    ".005": 1,
+    ".006": 1,
+    ".007": 1,
+    ".008": 1
+  },
+  "per_dir": {
+    "content/drive/MyDrive": {
+      "files": 623,
+      "bytes": 22264067920
+    }
+  },
+  "seconds": 5.9,
+  "method": "Kaggle API file listing (metadata only)"
+}

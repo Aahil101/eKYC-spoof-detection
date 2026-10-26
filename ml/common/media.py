@@ -24,6 +24,8 @@ class DecodedVideo:
     frames: list[np.ndarray]        # sampled BGR frames
     times_ms: list[float]
     meta: dict[str, Any]
+    dense_frames: list[np.ndarray] | None = None   # every decoded frame, downscaled (rPPG / blink / motion)
+    dense_times_ms: list[float] | None = None
 
 
 def _resize_max_side(img: np.ndarray, max_side: int) -> np.ndarray:
@@ -36,7 +38,7 @@ def _resize_max_side(img: np.ndarray, max_side: int) -> np.ndarray:
 
 
 def decode_video(data: bytes, sample_frames: int = 16, max_seconds: float = 12.0,
-                 max_side: int = 720) -> DecodedVideo:
+                 max_side: int = 720, dense_max_side: int = 0) -> DecodedVideo:
     try:
         container = av.open(io.BytesIO(data))
     except Exception as e:  # PyAV raises several error types
@@ -88,7 +90,9 @@ def decode_video(data: bytes, sample_frames: int = 16, max_seconds: float = 12.0
         "bitrate_bps": float(bitrate or 0),
         "bytes": len(data),
     }
-    return DecodedVideo(frames=[all_frames[i] for i in idx], times_ms=[times[i] for i in idx], meta=meta)
+    dense = [_resize_max_side(f, dense_max_side) for f in all_frames] if dense_max_side else None
+    return DecodedVideo(frames=[all_frames[i] for i in idx], times_ms=[times[i] for i in idx], meta=meta,
+                        dense_frames=dense, dense_times_ms=list(times) if dense else None)
 
 
 def decode_document(data: bytes, content_type: str | None, max_side: int = 2000, pdf_dpi: int = 200) -> np.ndarray:

@@ -30,6 +30,7 @@ import numpy as np
 from training import jobs as jobs_mod
 from training import audit as _audit  # noqa: F401  (registers dataset_audit)
 from training import fetch_job as _fetch  # noqa: F401  (registers fetch_archive)
+from training import feature_jobs as _fj  # noqa: F401  (registers extract_features, train_heads)
 from training.checkpoint import CheckpointManager, find_resume_checkpoint
 from training.config import load_job_config
 from training.paths import REPO_ROOT, input_roots, is_kaggle, output_root
