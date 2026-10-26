@@ -1,0 +1,18 @@
+# Dataset audit (Kaggle mirrors vs. original papers)
+
+Run 2026-10-26 by the `dataset_audit` notebook (https://www.kaggle.com/code/aahil1011/codmav-dataset-audit, version 3, source git `0f6223a`). It walked the mounted files inside Kaggle and downloaded nothing. FF++ and Celeb-DF were cross-checked with the Kaggle file-listing API (`scripts/audit_listing.py`; JSON in `docs/audits/`). "Paper" counts come only from the cited papers or dataset pages in `RESEARCH_NOTES.md`.
+
+| Dataset | Kaggle mount | Observed | Expected (source) | Verdict |
+|---|---|---|---|---|
+| Celeb-DF v2 `reubensuju/celeb-df-v2` | `/kaggle/input/datasets/reubensuju/celeb-df-v2` | Celeb-real 590, Celeb-synthesis 5,639, YouTube-real 300 `.mp4`, plus `List_of_testing_videos.txt`; 10.16 GB | 590 / 5,639 / 300 (Celeb-DF paper [15] and dataset README) | **Matches** |
+| FaceForensics++ c23 `xdxd003/ff-c23` | `/kaggle/input/datasets/xdxd003/ff-c23` | original, Deepfakes, Face2Face, FaceSwap, NeuralTextures, FaceShifter: 1,000 `.mp4` each; DeepFakeDetection 1,000; 10 CSV; 17.9 GB | 1,000 originals and 1,000 per manipulation method [14] | **Matches** for FF++ core. DeepFakeDetection is a 1,000-video **subset** of Google's DFD. Use it only as an extra cross-dataset set and say so |
+| CelebA-Spoof `attentionlayer241/celeba-spoof-for-face-antispoofing` | `/kaggle/input/datasets/attentionlayer241/celeba-spoof-for-face-antispoofing` | 561,575 images (494,405 JPG + 67,170 PNG) and 561,578 `_BB.txt` files; `Data/train` 988,810 files, `Data/test` 134,340 files; `metas/` with intra_test, protocol1, protocol2 | 625,537 images [30] | **Partial: 89.8% of the paper's image count.** Labels and protocols are present. Report the observed count and the shortfall in the paper, and use the official `metas/` splits restricted to the files that exist |
+| DF40 slice `goodboyxdd/dataset-df40-slice` | `/kaggle/input/datasets/goodboyxdd/dataset-df40-slice` | 268,805 files: frames + landmarks (`.npy`) for **2 techniques only**, SadTalker (talking-face) and SimSwap (face swap), as test sets on the FF and CDF sources plus SadTalker train; real frames of FF++ originals and Celeb-DF | 40 techniques [18] | **Not the full DF40.** Too narrow for 40-way leave-one-generator-out. Still useful as two *unseen generator families* for novelty experiments |
+| SIDTD templates (self-fetched) | notebook output `aahil1011/codmav-fetch-sidtd-templates` | `templates.zip` 1,273,966,468 B (equals the server Content-Length), sha256 `e21a1c8bb85a184137faac160641f67bfe39b96b50ce1f645626e10a35567c0f`; 2,222 JPG + 1,232 JSON | per SIDTD paper [7] (the real/fake split is checked when the M1 loader is built in milestone 3) | **Fetched from the original host**, unmodified |
+| DFDC (competition) | not attached yet | — | — | Accept the competition rules on Kaggle before first use |
+
+## Consequences for the experiment plan
+
+- **E6 (novelty, leave-one-generator-out):** primary protocol is FF++ leave-one-method-out over {Deepfakes, Face2Face, FaceSwap, NeuralTextures, FaceShifter}. A second novelty test uses generator families never seen in training: SadTalker (talking-face synthesis) and SimSwap (identity swap) from the DF40 slice, both drawn from FF and CDF sources. Full DF40 stays future work unless a complete mirror turns up.
+- **M3 (PAD):** CelebA-Spoof results are reported on the available 561,575-image subset with official protocol files. The paper must state this.
+- **Mounts:** Kaggle now mounts datasets under `/kaggle/input/datasets/<owner>/<slug>`. Loaders resolve mounts with `training.audit._find_mount` and never hardcode paths.

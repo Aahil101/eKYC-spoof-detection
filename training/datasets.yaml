@@ -18,7 +18,7 @@ datasets:
     kind: dataset
     kaggle_ref: xdxd003/ff-c23
     kaggle_url: https://www.kaggle.com/datasets/xdxd003/ff-c23
-    verified: partial         # 17.9 GB; FaceForensics++_C23/<method>/*.mp4 incl. DeepFakeDetection; counts via dataset_audit
+    verified: true            # audit: 1000 each original/DF/F2F/FS/NT/FaceShifter; DeepFakeDetection is a 1000-video subset
     expected_counts: {original: 1000, Deepfakes: 1000, Face2Face: 1000, FaceSwap: 1000, NeuralTextures: 1000}
     original: FaceForensics++ (Roessler et al., ICCV 2019) - RESEARCH_NOTES [14]
     original_url: https://github.com/ondyari/FaceForensics
@@ -45,7 +45,7 @@ datasets:
     kind: dataset
     kaggle_ref: reubensuju/celeb-df-v2
     kaggle_url: https://www.kaggle.com/datasets/reubensuju/celeb-df-v2
-    verified: partial         # 9.97 GB; listing shows Celeb-real/*.mp4; counts via dataset_audit
+    verified: true            # audit 2026-10-26: 590 / 5639 / 300 + test list (docs/DATASET_AUDIT.md)
     expected_counts: {Celeb-real: 590, YouTube-real: 300, Celeb-synthesis: 5639}
     original: Celeb-DF v2 (Li et al., CVPR 2020) - RESEARCH_NOTES [15]
     original_url: https://github.com/yuezunli/celeb-deepfakeforensics
@@ -59,7 +59,7 @@ datasets:
     kind: dataset
     kaggle_ref: attentionlayer241/celeba-spoof-for-face-antispoofing
     kaggle_url: https://www.kaggle.com/datasets/attentionlayer241/celeba-spoof-for-face-antispoofing
-    verified: partial         # 77 GB; CelebA_Spoof/Data/test/<id>/live/*.png + *_BB.txt; counts via dataset_audit
+    verified: partial         # audit: 561,575 images = 89.8% of the paper's 625,537; metas/ protocols present
     expected_counts: {images_total: 625537}
     original: CelebA-Spoof (Zhang et al., ECCV 2020) - RESEARCH_NOTES [30]
     original_url: https://github.com/ZhangYuanhan-AI/CelebA-Spoof
@@ -85,7 +85,7 @@ datasets:
     kind: dataset
     kaggle_ref: goodboyxdd/dataset-df40-slice
     kaggle_url: https://www.kaggle.com/datasets/goodboyxdd/dataset-df40-slice
-    verified: partial         # a SLICE (13.9 GB, PNG frames, few downloads); which techniques it covers: dataset_audit
+    verified: partial         # audit: NOT full DF40 - only SadTalker + SimSwap (FF/CDF sources) + real frames
     original: DF40 (Yan et al., NeurIPS 2024 D&B) - RESEARCH_NOTES [18]
     original_url: https://github.com/SCLBD/DeepfakeBench
     original_license: see DF40 / DeepfakeBench README

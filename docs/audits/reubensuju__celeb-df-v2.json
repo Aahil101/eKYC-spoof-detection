@@ -1,0 +1,31 @@
+{
+  "ref": "reubensuju/celeb-df-v2",
+  "complete": true,
+  "pages": 33,
+  "n_files": 6530,
+  "total_bytes": 10156100196,
+  "extensions": {
+    ".mp4": 6529,
+    ".txt": 1
+  },
+  "per_dir": {
+    ".": {
+      "files": 1,
+      "bytes": 17009
+    },
+    "Celeb-real": {
+      "files": 590,
+      "bytes": 946501150
+    },
+    "Celeb-synthesis": {
+      "files": 5639,
+      "bytes": 8509673516
+    },
+    "YouTube-real": {
+      "files": 300,
+      "bytes": 699908521
+    }
+  },
+  "seconds": 34.0,
+  "method": "Kaggle API file listing (metadata only)"
+}

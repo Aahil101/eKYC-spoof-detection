@@ -1,0 +1,35 @@
+{
+  "ref": "goodboyxdd/dataset-df40-slice",
+  "complete": false,
+  "pages": 400,
+  "n_files": 80000,
+  "total_bytes": 6702273384,
+  "extensions": {
+    ".png": 79998,
+    ".json": 2
+  },
+  "per_dir": {
+    "dataset_df40_2": {
+      "files": 2,
+      "bytes": 11950839
+    },
+    "dataset_df40_2/Celeb-DF-v2/Celeb-real": {
+      "files": 18650,
+      "bytes": 1469659518
+    },
+    "dataset_df40_2/Celeb-DF-v2/YouTube-real": {
+      "files": 9524,
+      "bytes": 767771655
+    },
+    "dataset_df40_2/FaceForensics++/original_sequences": {
+      "files": 31949,
+      "bytes": 2995693455
+    },
+    "dataset_df40_2/sadtalker_test/cdf": {
+      "files": 19875,
+      "bytes": 1457197917
+    }
+  },
+  "seconds": 575.3,
+  "method": "Kaggle API file listing (metadata only)"
+}

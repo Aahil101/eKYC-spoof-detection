@@ -23,7 +23,7 @@ Datasets are attached to Kaggle notebooks (see `training/datasets.yaml` and `doc
 | M3 replay / PAD | CelebA-Spoof mirror [30] | OULU-NPU [28] (gated) | — |
 | M4 liveness | CelebA-Spoof live/spoof (passive cues); own consented recordings for challenge-response | OULU-NPU | — |
 | M5 face match | Celeb-DF real videos (several videos per identity) | FF++ originals | — |
-| E6 novelty (LOGO) | FF++ leave-one-method-out | DF40 leave-one-generator-out | — |
+| E6 novelty (LOGO) | FF++ leave-one-method-out (DF, F2F, FS, NT, FaceShifter) | unseen families SadTalker + SimSwap from the DF40 slice (`docs/DATASET_AUDIT.md`) | — |
 | E7-S6 natural sensor drift | DFDC (varied capture conditions) | OULU-NPU protocol 3 | synthetic corruptions only |
 
 ### 0.2 Splits
@@ -93,7 +93,7 @@ Window sizes are {100, 250, 500} with step 50, matching the small-sample concern
 Report delay, detection rate, false alarms per 10k sessions, and attribution hit@1/3.
 
 ### E6 — Novel-attack detection (leave-one-generator-out)
-- **Primary:** DF40 [18]. Train M2 on k generators and hold out one family at a time (face-swap, reenactment, entire-face synthesis), rotating over 5–8 held-out techniques. **Secondary:** FF++ leave-one-method-out (DF, F2F, FS, NT, FaceShifter) [14].
+- **Primary:** FF++ leave-one-method-out [14]. Train on 4 of {Deepfakes, Face2Face, FaceSwap, NeuralTextures, FaceShifter}, hold out 1, and rotate. **Secondary (unseen families):** SadTalker (talking-face) and SimSwap from the Kaggle DF40 slice [18]. The full 40-technique DF40 is not available on Kaggle (`docs/DATASET_AUDIT.md`).
 - Known classes = {genuine, each known attack type (including replay and document attack)}. OOD methods: MSP, energy [73], ODIN [74], Mahalanobis [72], kNN [75], Deep SVDD [76], Isolation Forest [77], LOF [78], OpenMax-lite [79]. Each is evaluated in the M2 CLIP space and in the concatenated artifact space.
 - **Sample level:** AUROC, FPR@95TPR, AUPR.
 - **Stream level:** the held-out generator is injected at a known onset with prevalence {1%, 5%, 10%} of sessions. Report conformal binomial test detection delay [81], HDBSCAN cluster alert delay [82], alert precision, and cluster purity.

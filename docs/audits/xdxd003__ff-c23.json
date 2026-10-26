@@ -1,0 +1,47 @@
+{
+  "ref": "xdxd003/ff-c23",
+  "complete": true,
+  "pages": 36,
+  "n_files": 7010,
+  "total_bytes": 17919806673,
+  "extensions": {
+    ".mp4": 7000,
+    ".csv": 10
+  },
+  "per_dir": {
+    "FaceForensics++_C23/DeepFakeDetection": {
+      "files": 1000,
+      "bytes": 6960128285
+    },
+    "FaceForensics++_C23/Deepfakes": {
+      "files": 1000,
+      "bytes": 1992801584
+    },
+    "FaceForensics++_C23/Face2Face": {
+      "files": 1000,
+      "bytes": 1946827903
+    },
+    "FaceForensics++_C23/FaceShifter": {
+      "files": 1000,
+      "bytes": 1916871128
+    },
+    "FaceForensics++_C23/FaceSwap": {
+      "files": 1000,
+      "bytes": 1639456740
+    },
+    "FaceForensics++_C23/NeuralTextures": {
+      "files": 1000,
+      "bytes": 1525872246
+    },
+    "FaceForensics++_C23/csv": {
+      "files": 10,
+      "bytes": 1263521
+    },
+    "FaceForensics++_C23/original": {
+      "files": 1000,
+      "bytes": 1936585266
+    }
+  },
+  "seconds": 35.2,
+  "method": "Kaggle API file listing (metadata only)"
+}

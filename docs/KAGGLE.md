@@ -9,7 +9,7 @@ All training runs on Kaggle (T4/P100, about 30 GPU-h/week, 12 h per session). Da
 | Source dataset | https://www.kaggle.com/datasets/aahil1011/codmav-src | v2 (git `27ff19c`) |
 | Selftest notebook | https://www.kaggle.com/code/aahil1011/codmav-selftest | COMPLETE; output imported as bundle `0.0.1+8b7f7c43b6`, round trip verified (Kaggle image: Python 3.13) |
 | SIDTD fetch | https://www.kaggle.com/code/aahil1011/codmav-fetch-sidtd-templates | COMPLETE; 1.27 GB from original host, 3,454 files |
-| Dataset audit | https://www.kaggle.com/code/aahil1011/codmav-dataset-audit | see `docs/DATASET_AUDIT.md` |
+| Dataset audit | https://www.kaggle.com/code/aahil1011/codmav-dataset-audit | COMPLETE (v3), results in `docs/DATASET_AUDIT.md` |
 
 The CLI authenticates from `%USERPROFILE%\.kaggle\access_token`, outside the repo. On Windows, pass **absolute** paths to `kaggle datasets create/version -p` and `kaggle kernels push -p`. Relative paths with `/` fail in kaggle 2.2.5.
 
