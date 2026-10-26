@@ -1,0 +1,20 @@
+job: train_heads
+run_name: train_heads_a
+implemented: true
+module: ALL
+seed: 0
+description: "Heads M1/M2/M4/M5 (M3 trained separately once CelebA-Spoof extraction completes)."
+params:
+  modules: [M1, M2, M4, M5]
+modes:
+  smoke: {}
+  full: {}
+checkpoint: {every_steps: 1000000, every_minutes: 1000, keep_last: 1}
+budget: {max_wall_minutes: 240}
+data:
+  datasets: [feats_ffpp, feats_celebdf, feats_msu, feats_sidtd]
+kaggle:
+  accelerator: none
+  internet: true
+  pip_packages: [onnxruntime==1.31.0]
+  weights_datasets: []
