@@ -24,7 +24,8 @@ from training.paths import REPO_ROOT
 
 
 def import_run(run_dir: Path, module: str, bundle: str, semver: str | None = None,
-               bundles_root: Path = REPO_ROOT / "models" / "bundles", allow_incomplete: bool = False) -> str:
+               bundles_root: Path = REPO_ROOT / "models" / "bundles", allow_incomplete: bool = False,
+               artifacts: list[str] | None = None) -> str:
     man_path = run_dir / "run_manifest.json"
     if not man_path.exists():
         raise BundleError(f"{man_path} not found - point --run-dir at runs/<run_name>/")
@@ -32,11 +33,13 @@ def import_run(run_dir: Path, module: str, bundle: str, semver: str | None = Non
     if man.get("status") != "completed" and not allow_incomplete:
         raise BundleError(f"run status is {man.get('status')!r}; refusing to import (use --allow-incomplete)")
     expected_module = man.get("config", {}).get("module")
-    if expected_module and expected_module != module:
+    if expected_module and expected_module not in (module, "ALL"):
         raise BundleError(f"run trained module {expected_module}, not {module}")
     art_dir = run_dir / "artifacts"
     files = []
     for name, digest in (man.get("artifacts") or {}).items():
+        if artifacts is not None and name not in artifacts:
+            continue
         p = art_dir / name
         if not p.exists():
             raise BundleError(f"artifact missing: {p}")
@@ -58,10 +61,12 @@ def main() -> None:
     ap.add_argument("--bundle", required=True)
     ap.add_argument("--semver", default=None)
     ap.add_argument("--allow-incomplete", action="store_true")
+    ap.add_argument("--artifacts", nargs="*", default=None,
+                    help="only these artifact files (e.g. head_M2.pkl); default: all")
     ap.add_argument("--bundles-root", type=Path, default=REPO_ROOT / "models" / "bundles")
     a = ap.parse_args()
     v = import_run(a.run_dir, a.module, a.bundle, a.semver, bundles_root=a.bundles_root,
-                   allow_incomplete=a.allow_incomplete)
+                   allow_incomplete=a.allow_incomplete, artifacts=a.artifacts)
     print(f"bundle {a.bundle} -> version {v}")
 
 

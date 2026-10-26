@@ -283,3 +283,12 @@ def test_train_heads_end_to_end(tmp_path, monkeypatch):
     assert set(m["artifacts"]) == {"head_M1.pkl", "head_M4.pkl", "heads_report.json"}
     rep = json.loads((tmp_path / "runs" / "train_heads" / "artifacts" / "heads_report.json").read_text())
     assert rep["modules"]["M1"]["metrics"]["test"]["auc"] > 0.9
+    from ml.registry.bundle import verify_bundle
+    from training.import_heads import import_all
+    v = import_all(tmp_path / "runs" / "train_heads", "b", "0.3.0", tmp_path / "bundles")
+    assert verify_bundle(tmp_path / "bundles" / "b") == v
+    assert (tmp_path / "bundles" / "b" / "M4" / "head_M4.pkl").exists()
+    assert not (tmp_path / "bundles" / "b" / "M4" / "head_M1.pkl").exists()
+    from ml.modules import load_modules
+    mods = load_modules(tmp_path / "bundles" / "b")
+    assert type(mods["M1"]).__name__ == "M1Document" and type(mods["M2"]).__name__ == "PlaceholderModule"
