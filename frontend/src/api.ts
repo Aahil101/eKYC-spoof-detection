@@ -22,6 +22,7 @@ export type ModuleOut = {
   model_version: string;
   latency_ms: number;
   message: string | null;
+  explanations?: Record<string, unknown>;
 };
 
 export type SessionOut = {

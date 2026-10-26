@@ -132,9 +132,30 @@ class HeadArtifact:
     dist_p99: float
     metrics: dict = field(default_factory=dict)
     data_info: dict = field(default_factory=dict)
+    keep: np.ndarray | None = None   # columns used (all-NaN / constant training columns are dropped)
+
+    def _k(self, X: np.ndarray) -> np.ndarray:
+        return X if self.keep is None else X[:, self.keep]
+
+    def columns(self) -> list[str]:
+        """Names of the columns the learner actually sees (after dropping unusable ones)."""
+        full = list(self.feature_names) + [f"{k}[{i}]" for k in self.vec_keys if k in self.vec_dims
+                                           for i in range(self.vec_dims[k])]
+        return full if self.keep is None else [full[i] for i in self.keep]
+
+    def contributions(self, x: np.ndarray) -> np.ndarray:
+        """logreg: coef * standardised value per used column; HGB: z-score (deviation from training mean)."""
+        xk = self._k(x[None])[0]
+        z = (np.where(np.isnan(xk), self.mu, xk) - self.mu) / self.sd
+        if self.kind == "logreg":
+            sc = self.learner[0]
+            zz = (np.where(np.isnan(xk), self.mu, xk) - sc.mean_) / sc.scale_
+            return self.learner[-1].coef_[0] * zz
+        return z
 
     # ---- inference
     def logits(self, X: np.ndarray) -> np.ndarray:
+        X = self._k(X)
         if self.kind == "logreg":
             Xi = np.where(np.isnan(X), self.mu, X)
             return self.learner.decision_function(Xi)
@@ -143,6 +164,7 @@ class HeadArtifact:
         return np.log(p / (1 - p))
 
     def _knn_dist(self, X: np.ndarray, k: int = 5) -> np.ndarray:
+        X = self._k(X)
         Z = (np.where(np.isnan(X), self.mu, X) - self.mu) / self.sd
         out = []
         for z in Z:
@@ -171,6 +193,12 @@ def fit_head(module: str, X: np.ndarray, y: np.ndarray, split: np.ndarray, names
     from sklearn.ensemble import HistGradientBoostingClassifier
     from sklearn.linear_model import LogisticRegression
     tr, ca = split == "train", split == "cal"
+    Xfull = X
+    with np.errstate(all="ignore"):
+        finite = np.isfinite(X[tr]).any(axis=0)
+        varying = np.nanstd(np.where(np.isfinite(X[tr]), X[tr], np.nan), axis=0) > 1e-12
+    keep = np.flatnonzero(finite & np.nan_to_num(varying, nan=False).astype(bool))
+    X = X[:, keep]
     mu = np.nanmean(X[tr], axis=0)
     mu = np.where(np.isfinite(mu), mu, 0.0)
     sd = np.nanstd(X[tr], axis=0)
@@ -190,11 +218,15 @@ def fit_head(module: str, X: np.ndarray, y: np.ndarray, split: np.ndarray, names
     ref_idx = rng.choice(np.flatnonzero(tr), size=min(2000, tr.sum()), replace=False)
     Z = (np.where(np.isnan(X[ref_idx]), mu, X[ref_idx]) - mu) / sd
     art = HeadArtifact(module, list(names), dict(vec_dims), tuple(vec_keys), scalar_key, learner, None, kind,
-                       feature_version, Z.astype(np.float32), mu, sd, 0.0, 1.0)
-    z_cal = art.logits(X[ca])
+                       feature_version, Z.astype(np.float32), mu, sd, 0.0, 1.0, keep=keep)
+    art.keep = None          # X is already reduced while fitting; restored below
+    X_red = X
+    X = Xfull
+    z_cal = art.logits(X_red[ca])
     art.calibrator = (TemperatureScaler() if calib == "temperature" else IsotonicCal()).fit(z_cal, y[ca])
     # in-distribution scale from calibration rows (not train rows: those are in train_ref themselves)
-    d_cal = art._knn_dist(X[ca][: 2000])
+    d_cal = art._knn_dist(X_red[ca][: 2000])
+    art.keep = keep
     art.dist_p50, art.dist_p99 = float(np.percentile(d_cal, 50)), float(np.percentile(d_cal, 99))
     metrics: dict = {}
     for part in ("cal", "val", "test"):

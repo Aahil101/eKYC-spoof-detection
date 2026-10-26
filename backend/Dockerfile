@@ -9,7 +9,10 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends libglib2.0-0 && rm -rf /var/lib/apt/lists/*
 
 COPY requirements/ requirements/
-RUN pip install -r requirements/base.txt "psycopg[binary]==3.2.10"
+RUN pip install -r requirements/base.txt "psycopg[binary]==3.2.10" \
+ && pip install torch==2.14.1 torchvision==0.29.1 --index-url https://download.pytorch.org/whl/cpu \
+ && pip install -r requirements/ml.txt
+ENV HF_HOME=/app/models/store/hf CODMAV_WEIGHTS_DIR=/app/models/store
 
 COPY pyproject.toml ./
 COPY backend/ backend/

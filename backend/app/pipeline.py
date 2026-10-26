@@ -31,12 +31,32 @@ def load_yaml(path: Path) -> dict:
 
 
 def build_modules(bundle_dir: Path | None) -> dict[str, KYCModule]:
-    # Milestone 3 replaces this with loaders that read weights from bundle_dir.
-    return {m: PlaceholderModule(m) for m in MODULE_NAMES}
+    """Trained heads from the bundle where present; placeholders otherwise."""
+    if bundle_dir is None:
+        return {m: PlaceholderModule(m) for m in MODULE_NAMES}
+    from ml.modules import load_modules
+    return load_modules(bundle_dir)
+
+
+def _jsonable(x):
+    import numpy as np
+    if isinstance(x, dict):
+        return {str(k): _jsonable(v) for k, v in x.items()}
+    if isinstance(x, (list, tuple)):
+        return [_jsonable(v) for v in x]
+    if isinstance(x, np.ndarray):
+        return _jsonable(x.tolist())
+    if isinstance(x, (np.floating, float)):
+        return None if x != x or x in (float("inf"), float("-inf")) else float(x)
+    if isinstance(x, (np.integer,)):
+        return int(x)
+    if isinstance(x, np.bool_):
+        return bool(x)
+    return x
 
 
 def decide(outputs: list[ModuleOutput], policy: dict) -> dict:
-    """Decision policy stub honouring the no-fake-numbers rule."""
+    """Decision policy stub honouring the no-fake-numbers rule (fusion arrives in milestone 4)."""
     ok = [o for o in outputs if o.status == "ok"]
     th = policy.get("thresholds") or {}
     if not ok:
@@ -44,9 +64,13 @@ def decide(outputs: list[ModuleOutput], policy: dict) -> dict:
                 "(all modules are placeholders). No score was produced.", "fused_score": None,
                 "fused_uncertainty": None, "weights": {}, "veto": None}
     if th.get("t_high") is None or th.get("t_low") is None:
-        return {"decision": "UNAVAILABLE", "reason": "Decision thresholds have not been calibrated "
-                "(config/policy.yaml thresholds are null; run experiment E4).", "fused_score": None,
-                "fused_uncertainty": None, "weights": {}, "veto": None}
+        notes = []
+        m4 = next((o for o in ok if o.module == "M4"), None)
+        if m4 and m4.explanations.get("challenge_failed"):
+            notes.append("Liveness challenge not completed (hard rule: would force REJECT/retry).")
+        return {"decision": "UNAVAILABLE", "reason": "Per-module scores are available, but fusion and "
+                "decision thresholds are not calibrated yet (milestone 4, experiment E4). "
+                + " ".join(notes), "fused_score": None, "fused_uncertainty": None, "weights": {}, "veto": None}
     raise NotImplementedError("fusion strategies are implemented in milestone 4")
 
 
@@ -79,12 +103,23 @@ class Pipeline:
                 doc = decode_document(raw, ctype, dcfg.get("max_side", 2000), dcfg.get("pdf_dpi", 200))
             else:
                 doc = None
-            vid = decode_video(self.store.get(session_id, "video"), vcfg.get("sample_frames", 16),
+            vid_bytes = self.store.get(session_id, "video")
+            vid = decode_video(vid_bytes, vcfg.get("sample_frames", 16),
                                vcfg.get("max_seconds", 12), vcfg.get("max_side", 720))
-            q = compute_quality(vid.frames, vid.meta, doc)
+            steps = challenge_from_json(challenge)
+            trained = any(not isinstance(m, PlaceholderModule) for m in self.modules.values())
+            analysis = None
+            if trained:
+                from ml.modules import analyse_session
+                analysis = analyse_session(vid_bytes, doc, steps, vcfg)
+                q = dict(analysis["quality"])
+                dq = compute_quality([], {}, doc)
+                q.update({k: v for k, v in dq.items() if k.startswith("doc_")})
+            else:
+                q = compute_quality(vid.frames, vid.meta, doc)
             prepared = PreparedSession(session_id=session_id, document_image=doc, frames=vid.frames,
                                        frame_times_ms=vid.times_ms, video_meta=vid.meta,
-                                       challenge=challenge_from_json(challenge), quality=q)
+                                       challenge=steps, quality=q, analysis=analysis)
             outputs: list[ModuleOutput] = []
             for name, mod in self.modules.items():
                 try:
@@ -94,7 +129,7 @@ class Pipeline:
                     outputs.append(ModuleOutput(module=name, status="failed", model_version=mod.version,
                                                 message=f"{type(e).__name__}: {e}"))
             result = decide(outputs, self.policy)
-            self._persist(session_id, outputs, q, vid.meta, doc_meta, result)
+            self._persist(session_id, outputs, q, vid.meta, doc_meta, result, analysis)
             log.info("session_processed", session_id=session_id, decision=result["decision"],
                      bundle_version=self.bundle_version)
         except MediaError as e:
@@ -103,7 +138,10 @@ class Pipeline:
             log.error("session_failed", session_id=session_id, error=str(e), tb=traceback.format_exc())
             self._fail(session_id, f"Internal error: {type(e).__name__}")
 
-    def _persist(self, session_id, outputs, q, video_meta, doc_meta, result) -> None:
+    def _persist(self, session_id, outputs, q, video_meta, doc_meta, result, analysis=None) -> None:
+        import numpy as np
+
+        from backend.app.db import EmbeddingRow, IdentityTemplate
         now = dt.datetime.now(dt.timezone.utc)
         with self.sm() as db:
             s = db.get(KYCSession, session_id)
@@ -112,11 +150,23 @@ class Pipeline:
             for o in outputs:
                 db.add(ModuleOutputRow(session_id=session_id, module=o.module, status=o.status, score=o.score,
                                        raw_score=o.raw_score, confidence=o.confidence, latency_ms=o.latency_ms,
-                                       model_version=o.model_version, features=o.features,
-                                       explanations=o.explanations, message=o.message))
+                                       model_version=o.model_version, features=_jsonable(o.features),
+                                       explanations=_jsonable(o.explanations), message=o.message))
+            if analysis:
+                # artifact-space embeddings for novelty detection (never identity)
+                for space, vec in (("m2_clip", analysis["m2_vec"].get("clip_mean")),
+                                   ("m3_lbp", analysis["m3_vec"].get("lbp")),
+                                   ("m1_spectrum", (analysis.get("doc") or {}).get("m1_vec", {}).get("spectrum"))):
+                    if vec is not None:
+                        v = np.asarray(vec, "<f4")
+                        db.add(EmbeddingRow(session_id=session_id, space=space, dim=len(v), vector=v.tobytes()))
+                if len(analysis.get("arc_embs", [])):
+                    t = np.asarray(analysis["arc_embs"], "<f4").mean(axis=0)
+                    db.add(IdentityTemplate(session_id=session_id, expires_at=now + self.media_ttl,
+                                            vector_encrypted=self.store.keyring.encrypt(
+                                                t.tobytes(), f"{session_id}/identity_template".encode())))
             # NaN is not valid JSON; store as None
-            db.add(QualityRow(session_id=session_id,
-                              values={k: (None if v != v else v) for k, v in q.items()}))
+            db.add(QualityRow(session_id=session_id, values=_jsonable(q)))
             s.video_meta = video_meta
             s.bundle_version = self.bundle_version
             s.decision = result["decision"]

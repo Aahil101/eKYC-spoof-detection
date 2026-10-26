@@ -80,6 +80,7 @@ class PreparedSession:
     landmarks: list[np.ndarray | None] = field(default_factory=list)
     face_boxes: list[tuple[int, int, int, int] | None] = field(default_factory=list)
     audio_path: str | None = None
+    analysis: dict[str, Any] | None = None     # shared per-session analysis (ml.modules.analyse_session)
 
 
 @runtime_checkable

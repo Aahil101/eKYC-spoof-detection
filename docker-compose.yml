@@ -21,6 +21,7 @@ services:
     volumes:
       - codmav-data:/app/data
       - ./models/bundles:/app/models/bundles:ro
+      - ./models/store:/app/models/store        # pretrained third-party weights (downloaded on first use)
     ports: ["127.0.0.1:8000:8000"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]

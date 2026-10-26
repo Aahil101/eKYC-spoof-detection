@@ -1,12 +1,11 @@
-# ML stack used from milestone 3 onward. NOT installed by default on the laptop.
-# On Kaggle, torch/torchvision are preinstalled; these extras are installed from the
-# wheelhouse dataset when internet is off (see docs/KAGGLE.md).
-# Versions are pinned when milestone 3 is implemented and verified on Kaggle.
-# open_clip_torch      # frozen CLIP ViT-B/16 (M2 default backbone)
-# mediapipe            # Face Landmarker 478 points (M4/M5, quality face size/pose)
-# insightface          # ArcFace buffalo_l (M5) - NON-COMMERCIAL model license
-# onnxruntime          # insightface runtime
-# facenet-pytorch      # drop-in alternative face matcher (M5)
-# scikit-learn         # heads, isotonic, HDBSCAN
-# vosk                 # offline ASR for "read digits" challenge (optional)
-# kaggle               # optional: CLI/API for pushing notebooks and fetching small subsets
+# ML stack for serving trained bundles (milestone 3). Verified on Python 3.12 (laptop, Docker) and
+# 3.13 (Kaggle) with these pins. torch/torchvision come from the CPU wheel index:
+#   pip install torch==2.14.1 torchvision==0.29.1 --index-url https://download.pytorch.org/whl/cpu
+open_clip_torch==3.3.0
+mediapipe==1.1.1
+onnxruntime==1.31.0
+scikit-learn==1.9.1
+vosk==0.3.45
+# optional alternatives (not installed by default):
+# insightface==2.1        # package itself; we load the ArcFace ONNX directly (NON-COMMERCIAL model license)
+# facenet-pytorch==2.6.0  # drop-in M5 embedder

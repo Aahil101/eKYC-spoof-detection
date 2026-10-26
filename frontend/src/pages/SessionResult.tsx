@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { deleteSession, getSession, type SessionOut } from "../api";
+import { ChallengeSteps, Img, LandmarkOverlay, RppgPlot, ScoreBar } from "../components/ModuleViews";
 
 const BADGE: Record<string, string> = {
   ACCEPT: "bg-green-100 text-green-900 border-green-400",
@@ -67,29 +68,34 @@ export default function SessionResult() {
 
       <div className="bg-white rounded-lg shadow p-6">
         <h2 className="font-semibold mb-3">Module outputs</h2>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left border-b">
-              <th scope="col" className="py-1">Module</th><th scope="col">Status</th>
-              <th scope="col">Score (1 = genuine)</th><th scope="col">Confidence</th><th scope="col">Note</th>
-            </tr>
-          </thead>
-          <tbody>
-            {s.modules.map((m) => (
-              <tr key={m.module} className="border-b align-top">
-                <td className="py-1">{m.module} · {m.title}</td>
-                <td>
-                  <span className={m.status === "placeholder" ? "bg-slate-200 px-2 rounded text-xs font-semibold" : ""}>
-                    {m.status.toUpperCase()}
-                  </span>
-                </td>
-                <td>{fmt(m.score)}</td>
-                <td>{fmt(m.confidence)}</td>
-                <td className="text-slate-600">{m.message}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <ul className="space-y-4">
+          {s.modules.map((m) => {
+            const e = (m.explanations ?? {}) as Record<string, any>;
+            return (
+              <li key={m.module} className="border-b pb-3">
+                <div className="flex items-baseline justify-between gap-4">
+                  <h3 className="font-medium">{m.module} · {m.title}</h3>
+                  <span className="text-xs text-slate-500">{m.model_version}</span>
+                </div>
+                <ScoreBar m={m} />
+                {m.message && <p className="text-sm text-slate-600 mt-1">{m.message}</p>}
+                <div className="flex flex-wrap gap-4 mt-2">
+                  <Img b64={e.gradcam_png} alt="Grad-CAM: regions pushing towards 'fake'" />
+                  <Img b64={e.ela_heatmap_png} alt="Error level analysis (q=90)" />
+                  <Img b64={e.noise_heatmap_png} alt="Block noise-residual map" />
+                  <Img b64={e.id_portrait_png} alt="Portrait found on the ID document" />
+                  {e.overlay && <LandmarkOverlay ov={e.overlay} />}
+                </div>
+                {e.rppg_waveform && <RppgPlot wf={e.rppg_waveform} />}
+                {e.challenge_steps && <ChallengeSteps steps={e.challenge_steps} />}
+                {e.top_features && (
+                  <p className="text-xs text-slate-600 mt-1">Top features: {e.top_features
+                    .map((f: any) => `${f.feature} (${f.contribution > 0 ? "+" : ""}${f.contribution})`).join(", ")}</p>
+                )}
+              </li>
+            );
+          })}
+        </ul>
       </div>
 
       {s.quality && (
