@@ -28,7 +28,11 @@ A research-grade Video-KYC fraud detection system with two dashboards (KYC decis
 - Done: face pipeline (`ml/common/face.py`); extractors (`ml/features/`); heads and calibration (`ml/heads.py`); serving modules (`ml/modules.py`, wired into `backend/app/pipeline.py`); UI module views; Kaggle jobs (`training/feature_jobs.py`); configs `training/configs/extract_*.yaml`, `train_heads.yaml`; 62 tests passing.
 - Kaggle extraction notebooks (`kaggle.com/code/aahil1011/codmav-feats-<name>`):
   - `sidtd` COMPLETE (2,222 items, 0 errors), `msu` COMPLETE (280 items, 2 undecodable), `celebdf` COMPLETE (1,830 items, 1 error)
-  - `ffpp` and `celebaspoof` were still RUNNING. FF++ takes about 6 h at roughly 3.7 s per video. If a session dies, re-push the same notebook with its previous output attached; finished shards are reused automatically.
+  - `ffpp` COMPLETE (6,000 videos, 0 errors, 7.6 h). `celebaspoof` was still RUNNING at 02:30 IST 2026-10-27.
+  - Heads M1/M2/M4/M5 trained (`codmav-train-heads-a` v3) and imported as bundle `kyc-v0.3` (local only, `models/bundles` is git-ignored; rebuild with the import_heads command below). Results are in docs/MODULES.md. **M1's AUC of 1.0 is a compression shortcut; fix it in E1.**
+  - **Remaining for M3:** when `codmav-feats-celebaspoof` completes, push `train_heads.yaml` (all 5 modules) and re-import into `kyc-v0.3`.
+  - Heads must be trained with **scikit-learn 1.9.1** (pinned), because pickles must match the serving version.
+  - **Re-package codmav-src before pushing any notebook that uses a new config.**
 - **Next steps:**
   1. When all five `codmav-feats-*` are COMPLETE:
      ```

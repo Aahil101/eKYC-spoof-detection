@@ -32,6 +32,28 @@ Every module follows the same contract: `predict(session) -> ModuleOutput(score 
 | vosk_small_en | alphacephei.com vosk-model-small-en-us-0.15 | listed as Apache-2.0 on the model page (to verify) |
 | CLIP ViT-B/16 openai | open_clip / Hugging Face hub cache | OpenAI CLIP model card (to verify) |
 
+## Results (bundle `kyc-v0.3`, Kaggle run `codmav-train-heads-a` v3, feature version fv1, seed 0)
+
+Single run with no CIs yet; bootstrap CIs and seeds come in E1. Score = P(genuine). APCER is measured at BPCER = 5%.
+
+| Module | Test set | n (genuine / attack) | AUC | EER | ECE (cal → uncal) | APCER @ BPCER 5% | Conf. AUROC (correct) |
+|---|---|---|---|---|---|---|---|
+| M2 deepfake | FF++ c23 official test | 140 / 700 | **0.871** | 0.201 | 0.150 / 0.129 | 0.484 | 0.728 |
+| M2 cross-dataset | Celeb-DF v2 test list (unseen) | 178 / 340 | **0.769** | 0.303 | 0.144 | 0.797 | — |
+| M2 per method (AUC) | FF++ test | | DF 0.94 · F2F 0.85 · FS 0.91 · NT 0.78 · FaceShifter 0.87 | | | | |
+| M4 liveness | MSU-MFSD official test (20 subjects) | 40 / 119 | **0.691** | 0.347 | 0.116 | 0.815 | 0.702 |
+| M5 face match | Celeb-DF identity pairs, identity-disjoint | 102 / 306 | **0.995** | 0.010 | 0.005 | 0.000 (FAR) | 0.649 |
+| M1 document | SIDTD, template-disjoint | 185 / 239 | 1.000 ⚠ | 0.000 | 0.000 | 0.000 | — |
+| M3 replay | CelebA-Spoof | — | pending (extraction still running) | | | | |
+
+Honest reading:
+- **M1 = 1.000 is almost certainly a dataset shortcut, not real forgery skill.** SIDTD fakes differ from reals in global compression: ELA q95 mean is 2.38 for reals vs 0.68 for fakes, and DCT blockiness 1.03 vs 1.15, because the forgeries were re-encoded. The model separates "re-saved JPEG" from "original", so the score must not be reported as forgery detection. On a synthetic test document the live API gives M1 = 0.00 with confidence 0.00 (out of distribution). **TODO (E1): retrain with quality-matched re-encoding of reals, evaluate cross-dataset, report both.**
+- **M2 is weakest on NeuralTextures and loses about 0.10 AUC cross-dataset**, consistent with the literature. Calibration got slightly *worse* after temperature scaling on test (0.129 → 0.150). The calibration split is FF++ val, and this shows exactly the calibration shift that motivates monitoring.
+- **M4 is weak**, as expected from MSU-MFSD's size and compression.
+- **M5's near-perfect result is on Celeb-DF video-vs-video pairs.** Printed or scanned ID portraits will be harder (domain gap, see limitations).
+
+Live API check (`kyc-v0.3`, laptop CPU): FF++ original 000 → M2 0.85, M5 1.00 against its own face on the ID. FF++ Deepfakes 000_003 (face of 003 swapped onto 000) → **M2 0.09, M5 0.015**: both modules flag the fake. 15–37 s per session on CPU.
+
 ## Known limitations (also for the paper)
 - **Blink rate depends on content.** On FF++ news-anchor clips (people talking) EAR gives about 45 counts/min. On MSU-MFSD (people sitting still) live faces show a median of 15/min, which is plausible physiologically, against 7.5/min for attacks. Talking inflates the count, so `blink_rate_per_min` is an evidence feature, not a physiological measurement.
 - **rPPG separates little on these datasets.** MSU-MFSD medians are POS SNR −2.0 dB live vs −1.7 dB attack. It is a weak cue on compressed video, consistent with the literature, and is kept for the ablation (does rPPG help at all?).
