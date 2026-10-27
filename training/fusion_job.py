@@ -24,7 +24,7 @@ import numpy as np
 from ml.fusion import (MODULES, DecisionPolicy, FusionInput, choose_thresholds, choose_veto, evaluate_policy,
                        fit_fusion, quality_matrix)
 from ml.heads import build_matrix, ece, group_split, pad_metrics
-from training.feature_jobs import load_records
+from training.feature_jobs import load_records, regroup_sidtd
 from training.jobs import register
 from training.paths import input_roots
 
@@ -63,7 +63,7 @@ def build_sessions(heads: dict, seed: int = 0, doc_attack_frac: float = 0.3) -> 
     ff = load_records("ffpp_c23")
     cdf = load_records("celebdf_v2")
     msu = load_records("msu_mfsd")
-    sd = load_records("sidtd")
+    sd = regroup_sidtd(load_records("sidtd"))
 
     # ---- fusion split per record, mirroring each head's partitions
     def fsplit_from(part):

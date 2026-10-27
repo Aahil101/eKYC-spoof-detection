@@ -147,13 +147,28 @@ def list_celeba_spoof(root: Path, per_type_train: int, n_test: int, seed: int = 
     return items
 
 
+def sidtd_template(stem: str) -> str:
+    """SIDTD file stem -> template id shared by the genuine image and all its forgeries.
+    e.g. alb_id_83, alb_id_83_fake_6_35 -> alb_id_83 ; rus_internalpassport_00_fake_.. -> rus_internalpassport_00"""
+    m = re.match(r"([a-z]+_[a-z]+)_(\d+)", stem)
+    return f"{m.group(1)}_{m.group(2)}" if m else stem
+
+
+def regroup_sidtd(recs: list[dict]) -> list[dict]:
+    """Fix records extracted before the template regex covered every document type (leakage fix)."""
+    for r in recs:
+        r["group"] = sidtd_template(r["id"].split("/")[-1])
+        r["doc_type"] = r["group"].rsplit("_", 1)[0]
+    return recs
+
+
 def list_sidtd(root: Path) -> list[dict]:
     img_root = next(root.rglob("templates/Images"))
     items = []
     for sub, lab in (("reals", 1), ("fakes", 0)):
         for p in sorted((img_root / sub).glob("*.jpg")):
-            m = re.match(r"([a-z]+_(?:id|passport))_(\d+)", p.stem)
-            tmpl = f"{m.group(1)}_{m.group(2)}" if m else p.stem
+            tmpl = sidtd_template(p.stem)
+            m = re.match(r"([a-z]+_[a-z]+)_(\d+)", p.stem)
             ft = re.search(r"fake_(\d+)", p.stem)
             items.append({"id": f"sidtd/{sub}/{p.stem}", "path": str(p), "label": lab,
                           "attack_type": f"forgery_{ft.group(1)}" if ft else ("bona_fide" if lab else "forgery"),
@@ -492,7 +507,7 @@ def train_heads(cfg: dict, ctx) -> dict:
     # ---------------- M1 document: SIDTD templates, template-disjoint split, normalised documents (fv2)
     if "M1" in p["modules"]:
         from ml.features.images import M1_NORMALIZATION
-        sd = load_records("sidtd")
+        sd = regroup_sidtd(load_records("sidtd"))
         split = group_split([r["group"] for r in sd], seed)
         y = np.array([r["label"] for r in sd])
         extra = {}
@@ -506,6 +521,16 @@ def train_heads(cfg: dict, ctx) -> dict:
                        seed=seed, feature_version=FEATURE_VERSION)
         art.data_info = {"train_data": "SIDTD templates (reals vs crop&replace / inpainting fakes)",
                          "normalization": M1_NORMALIZATION, "counts": counts(sd, split)}
+        # Generalisation to UNSEEN document types (deployment reality: new ID designs) - leave-one-type-out
+        types = np.array([r["doc_type"] for r in sd])
+        lodo = {}
+        for t in sorted(set(types)):
+            sp = np.where(types == t, "test", group_split([r["group"] for r in sd], seed, (0.8, 0.2, 0.0, 0.0)))
+            a = fit_head("M1", X, y, sp, names, vd, ("spectrum",), "m1", kind="hgb", calib="isotonic", seed=seed,
+                         feature_version=FEATURE_VERSION)
+            lodo[t] = a.metrics.get("test", {}).get("auc")
+        vals = [v for v in lodo.values() if v is not None]
+        extra["leave_one_doctype_out_auc"] = {"per_type": lodo, "mean": float(np.mean(vals)), "min": float(np.min(vals))}
         save(art, extra)
 
     # ---------------- M5 face match: Celeb-DF real identities (+ FF++ originals as extra impostors)
