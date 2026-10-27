@@ -293,7 +293,9 @@ def test_train_heads_end_to_end(tmp_path, monkeypatch):
         recs = []
         for i in range(400):
             lab = int(i % 2)
-            r = {"id": f"{ds}/{i}", "label": lab, "attack_type": "bona_fide" if lab else "x", "group": f"g{i // 4}",
+            sid = f"{['alb_id', 'esp_id', 'fin_id'][i % 3]}_{i // 2:02d}" + ("" if lab else f"_fake_1_{i}")
+            r = {"id": f"{ds}/{'reals' if lab else 'fakes'}/{sid}", "label": lab,
+                 "attack_type": "bona_fide" if lab else "x", "group": f"g{i // 4}",
                  "split": ("test" if i % 5 == 0 else "train") if ds == "msu_mfsd" else "pool",
                  key: {"f1": rng.normal(lab * 2), "f2": rng.normal()}}
             if key == "m1":
