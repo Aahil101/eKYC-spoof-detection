@@ -247,6 +247,35 @@ def test_listers(tmp_path):
     assert {i["group"] for i in it} == {"alb_id_83"} and {i["label"] for i in it} == {0, 1}
 
 
+def test_list_celeba_spoof_samples_existing_only(tmp_path):
+    from training.feature_jobs import list_celeba_spoof
+    base = tmp_path / "CelebA_Spoof_" / "CelebA_Spoof"
+    (base / "metas" / "intra_test").mkdir(parents=True)
+    lab_tr, lab_te = {}, {}
+    for i in range(40):
+        kind = "live" if i % 2 == 0 else "spoof"
+        k = f"Data/train/{i // 4}/{kind}/{i}.png"
+        v = [0] * 44
+        v[40], v[43] = (0, 0) if kind == "live" else (1 + i % 3, 1)
+        lab_tr[k] = v
+        if i % 5:                                    # 20% of labelled files missing from the mirror
+            (base / k).parent.mkdir(parents=True, exist_ok=True)
+            (base / k).write_bytes(b"x")
+    for i in range(10):
+        k = f"Data/test/9{i}/live/{i}.png"
+        lab_te[k] = [0] * 44
+        (base / k).parent.mkdir(parents=True, exist_ok=True)
+        (base / k).write_bytes(b"x")
+    (base / "metas" / "intra_test" / "train_label.json").write_text(json.dumps(lab_tr))
+    (base / "metas" / "intra_test" / "test_label.json").write_text(json.dumps(lab_te))
+    it = list_celeba_spoof(tmp_path, per_type_train=3, n_test=5)
+    assert all(__import__("os").path.exists(x["path"]) for x in it)
+    tr = [x for x in it if x["split"] == "train"]
+    assert sum(x["label"] for x in tr) == 9                      # live: 3 * per_type_train
+    assert len([x for x in it if x["split"] == "test"]) == 5
+    assert {x["attack_type"] for x in tr if x["label"] == 0} <= {"spoof_type_1", "spoof_type_2", "spoof_type_3"}
+
+
 def test_celeba_spoof_bbox_reference_frame():
     from ml.features.images import celeba_spoof_bbox
     img = np.zeros((599, 600, 3), np.uint8)

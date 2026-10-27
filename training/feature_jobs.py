@@ -105,13 +105,28 @@ def list_msu(root: Path) -> list[dict]:
 
 
 def list_celeba_spoof(root: Path, per_type_train: int, n_test: int, seed: int = 0) -> list[dict]:
-    meta = next(root.rglob("metas/intra_test"))
+    # Bounded search (never rglob: the mount holds 1.1M files on a slow network FS).
+    meta = next((p for d in range(0, 4) for p in root.glob("*/" * d + "metas/intra_test") if p.is_dir()), None)
+    if meta is None:
+        raise FileNotFoundError("CelebA-Spoof metas/intra_test not found within depth 3")
     base = meta.parents[1]
     rng = np.random.default_rng(seed)
     items = []
+
+    def sample_existing(ks: list[str], n: int) -> list[str]:
+        """Sample first, then stat only the sampled files (mirror holds ~90% of images)."""
+        order = rng.permutation(len(ks))
+        out = []
+        for i in order:
+            if len(out) >= n:
+                break
+            if (base / ks[i]).exists():
+                out.append(ks[i])
+        return out
+
     for part, fn in (("train", "train_label.json"), ("test", "test_label.json")):
         lab = json.loads((meta / fn).read_text())
-        keys = sorted(k for k in lab if (base / k).exists())
+        keys = sorted(lab)
         if part == "train":
             by_type: dict[int, list[str]] = {}
             for k in keys:
@@ -119,9 +134,9 @@ def list_celeba_spoof(root: Path, per_type_train: int, n_test: int, seed: int = 
             chosen = []
             for t, ks in sorted(by_type.items()):
                 n = per_type_train * (3 if t == 0 else 1)          # more live samples (balance ~ attacks)
-                chosen += rng.choice(ks, size=min(n, len(ks)), replace=False).tolist()
+                chosen += sample_existing(ks, n)
         else:
-            chosen = rng.choice(keys, size=min(n_test, len(keys)), replace=False).tolist()
+            chosen = sample_existing(keys, n_test)
         for k in sorted(chosen):
             v = lab[k]
             subj = k.split("/")[2]
