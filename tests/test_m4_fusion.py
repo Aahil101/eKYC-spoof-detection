@@ -92,6 +92,7 @@ def test_veto_and_policy():
     C = np.full((2 * n, 5), 0.9)
     P[:n, 1] = rng.beta(8, 1, n)                                    # genuine: M2 high
     P[n:, 1] = rng.beta(1, 40, n)                                   # attacks: M2 very low (veto floor is 0.9)
+    assert choose_veto(P[:1000], C[:1000], y[:1000], ["M2"], 0.001)["M2"]["disabled"]   # too few genuine
     veto = choose_veto(P, C, y, ["M2"], false_trigger_max=0.001, min_conf=0.5)
     tau = veto["M2"]["p_fraud"]
     assert ((1 - P[:n, 1]) >= tau).mean() <= 0.002

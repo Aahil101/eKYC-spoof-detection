@@ -252,6 +252,8 @@ class DecisionPolicy:
     def decide(self, fused: float, P: dict[str, float | None], C: dict[str, float | None],
                challenge_failed: bool = False) -> tuple[str, str | None, str]:
         for mod, v in self.veto.items():
+            if v.get("disabled"):
+                continue
             p, c = P.get(mod), C.get(mod)
             if p is not None and c is not None and (1 - p) >= v["p_fraud"] and c >= v["min_conf"]:
                 return "REJECT", mod, f"{mod} is highly confident of fraud (veto)."
@@ -289,7 +291,12 @@ def choose_veto(P: np.ndarray, C: np.ndarray, y: np.ndarray, modules: list[str],
     for mod in modules:
         i = MODULES.index(mod)
         g = (y == 1) & np.isfinite(P[:, i]) & (np.nan_to_num(C[:, i]) >= min_conf)
-        if g.sum() < 50:
+        # Rule of three: with n clean genuine samples the 95% upper bound on the false-trigger rate is ~3/n,
+        # so a target of false_trigger_max can only be certified with n >= 3 / false_trigger_max samples.
+        need = int(math.ceil(3.0 / false_trigger_max))
+        if g.sum() < need:
+            out[mod] = {"disabled": True, "reason": f"only {int(g.sum())} genuine samples; >= {need} needed to "
+                        f"certify false-trigger <= {false_trigger_max}", "n_genuine_fit": int(g.sum())}
             continue
         pf = 1 - P[g, i]
         tau = float(np.quantile(pf, 1 - false_trigger_max)) + 1e-6
