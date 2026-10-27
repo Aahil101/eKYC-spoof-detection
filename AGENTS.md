@@ -28,9 +28,10 @@ A research-grade Video-KYC fraud detection system with two dashboards (KYC decis
 - Done: face pipeline (`ml/common/face.py`); extractors (`ml/features/`); heads and calibration (`ml/heads.py`); serving modules (`ml/modules.py`, wired into `backend/app/pipeline.py`); UI module views; Kaggle jobs (`training/feature_jobs.py`); configs `training/configs/extract_*.yaml`, `train_heads.yaml`; 62 tests passing.
 - Kaggle extraction notebooks (`kaggle.com/code/aahil1011/codmav-feats-<name>`):
   - `sidtd` COMPLETE (2,222 items, 0 errors), `msu` COMPLETE (280 items, 2 undecodable), `celebdf` COMPLETE (1,830 items, 1 error)
-  - `ffpp` COMPLETE (6,000 videos, 0 errors, 7.6 h). `celebaspoof` was still RUNNING at 02:30 IST 2026-10-27.
+  - `ffpp` COMPLETE (6,000 videos, 0 errors, 7.6 h). `celebaspoof` COMPLETE (v2 after fixing a lister that stalled >12 h on rglob over 1.1M files; 25,500 images, 30 min).
   - Heads M1/M2/M4/M5 trained (`codmav-train-heads-a` v3) and imported as bundle `kyc-v0.3` (local only, `models/bundles` is git-ignored; rebuild with the import_heads command below). Results are in docs/MODULES.md. **M1's AUC of 1.0 is a compression shortcut; fix it in E1.**
-  - **Remaining for M3:** when `codmav-feats-celebaspoof` completes, push `train_heads.yaml` (all 5 modules) and re-import into `kyc-v0.3`.
+  - All 5 heads trained in `codmav-train-heads` v1 and imported as `kyc-v0.3` (0.3.0+84ab76b466).
+  - **Open issues before milestone 4:** (1) M3 image?video gap (MSU cross AUC 0.43; false-rejects genuine video), so retrain with MSU train subjects. (2) M1 SIDTD compression shortcut. Both are described in docs/MODULES.md.
   - Heads must be trained with **scikit-learn 1.9.1** (pinned), because pickles must match the serving version.
   - **Re-package codmav-src before pushing any notebook that uses a new config.**
 - **Next steps:**

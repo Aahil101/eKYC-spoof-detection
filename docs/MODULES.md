@@ -32,7 +32,7 @@ Every module follows the same contract: `predict(session) -> ModuleOutput(score 
 | vosk_small_en | alphacephei.com vosk-model-small-en-us-0.15 | listed as Apache-2.0 on the model page (to verify) |
 | CLIP ViT-B/16 openai | open_clip / Hugging Face hub cache | OpenAI CLIP model card (to verify) |
 
-## Results (bundle `kyc-v0.3`, Kaggle run `codmav-train-heads-a` v3, feature version fv1, seed 0)
+## Results (bundle `kyc-v0.3`, Kaggle run `codmav-train-heads` v1 (all five heads), feature version fv1, seed 0)
 
 Single run with no CIs yet; bootstrap CIs and seeds come in E1. Score = P(genuine). APCER is measured at BPCER = 5%.
 
@@ -44,10 +44,12 @@ Single run with no CIs yet; bootstrap CIs and seeds come in E1. Score = P(genuin
 | M4 liveness | MSU-MFSD official test (20 subjects) | 40 / 119 | **0.691** | 0.347 | 0.116 | 0.815 | 0.702 |
 | M5 face match | Celeb-DF identity pairs, identity-disjoint | 102 / 306 | **0.995** | 0.010 | 0.005 | 0.000 (FAR) | 0.649 |
 | M1 document | SIDTD, template-disjoint | 185 / 239 | 1.000 ⚠ | 0.000 | 0.000 | 0.000 | — |
-| M3 replay | CelebA-Spoof | — | pending (extraction still running) | | | | |
+| M3 replay | CelebA-Spoof intra-test (images) | 1,796 / 4,201 | **0.989** | 0.047 | 0.026 / 0.025 | 0.121 | 0.796 |
+| M3 cross-dataset | MSU-MFSD all 278 videos (unseen) | 70 / 208 | **0.430** ⚠ | 0.550 | 0.287 | 1.000 | — |
 
 Honest reading:
 - **M1 = 1.000 is almost certainly a dataset shortcut, not real forgery skill.** SIDTD fakes differ from reals in global compression: ELA q95 mean is 2.38 for reals vs 0.68 for fakes, and DCT blockiness 1.03 vs 1.15, because the forgeries were re-encoded. The model separates "re-saved JPEG" from "original", so the score must not be reported as forgery detection. On a synthetic test document the live API gives M1 = 0.00 with confidence 0.00 (out of distribution). **TODO (E1): retrain with quality-matched re-encoding of reals, evaluate cross-dataset, report both.**
+- **M3 does not transfer from images to video (cross-dataset AUC 0.43, worse than chance).** On the live check it gives a **genuine** FF++ video 0.00 with confidence 0.96. That is a confident false reject, and the kNN confidence does not catch it because the frame-texture features fall inside the CelebA-Spoof training range. This image→video domain gap (CelebA-Spoof still photos vs compressed video frames) is a real limitation, and it also shows the confidence measure can fail. **Fix planned for the start of milestone 4:** retrain M3 on CelebA-Spoof plus the MSU-MFSD *train* subjects (video domain), evaluate on the MSU *test* subjects, and keep M3 out of the hard veto until cross-domain AUC is acceptable.
 - **M2 is weakest on NeuralTextures and loses about 0.10 AUC cross-dataset**, consistent with the literature. Calibration got slightly *worse* after temperature scaling on test (0.129 → 0.150). The calibration split is FF++ val, and this shows exactly the calibration shift that motivates monitoring.
 - **M4 is weak**, as expected from MSU-MFSD's size and compression.
 - **M5's near-perfect result is on Celeb-DF video-vs-video pairs.** Printed or scanned ID portraits will be harder (domain gap, see limitations).
