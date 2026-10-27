@@ -32,6 +32,7 @@ from training import audit as _audit  # noqa: F401  (registers dataset_audit)
 from training import fetch_job as _fetch  # noqa: F401  (registers fetch_archive)
 from training import feature_jobs as _fj  # noqa: F401  (registers extract_features, train_heads)
 from training import fusion_job as _fu  # noqa: F401  (registers train_fusion)
+from training import monitor_job as _mo  # noqa: F401  (registers build_reference)
 from training.checkpoint import CheckpointManager, find_resume_checkpoint
 from training.config import load_job_config
 from training.paths import REPO_ROOT, input_roots, is_kaggle, output_root

@@ -57,7 +57,7 @@ def import_run(run_dir: Path, module: str, bundle: str, semver: str | None = Non
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--run-dir", required=True, type=Path)
-    ap.add_argument("--module", required=True, choices=["M1", "M2", "M3", "M4", "M5", "FUSION"])
+    ap.add_argument("--module", required=True, choices=["M1", "M2", "M3", "M4", "M5", "FUSION", "MONITOR"])
     ap.add_argument("--bundle", required=True)
     ap.add_argument("--semver", default=None)
     ap.add_argument("--allow-incomplete", action="store_true")

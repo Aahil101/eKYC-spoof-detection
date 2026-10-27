@@ -42,10 +42,12 @@ def _jsonable(x):
     import numpy as np
     if isinstance(x, dict):
         return {str(k): _jsonable(v) for k, v in x.items()}
-    if isinstance(x, (list, tuple)):
+    if isinstance(x, (list, tuple, set)):
         return [_jsonable(v) for v in x]
     if isinstance(x, np.ndarray):
         return _jsonable(x.tolist())
+    if isinstance(x, np.str_):
+        return str(x)
     if isinstance(x, (np.floating, float)):
         return None if x != x or x in (float("inf"), float("-inf")) else float(x)
     if isinstance(x, (np.integer,)):

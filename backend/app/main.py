@@ -231,6 +231,81 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def purge():
         return purge_expired(sm, store)
 
+    # ---------------- Dashboard 2: monitoring (admin) ----------------
+    from backend.app.db import Alert, DriftReport
+    from monitoring.service import load_reference, run_window, simulate
+    app.state.reference = load_reference(bundle_dir)
+
+    def _ref():
+        if app.state.reference is None:
+            raise HTTPException(status.HTTP_409_CONFLICT, "active bundle has no MONITOR/reference_served.pkl")
+        return app.state.reference
+
+    @app.get("/api/monitor/status", dependencies=[Depends(auth.require_admin)])
+    def monitor_status():
+        r = app.state.reference
+        with sm() as db:
+            n = db.query(KYCSession).filter(KYCSession.status == "completed",
+                                            KYCSession.bundle_version == bundle_version).count()
+            n_alerts = db.query(Alert).filter(Alert.status == "open").count()
+        return {"bundle_version": bundle_version, "reference_available": r is not None,
+                "reference_n": int(len(r["reference"]["Q"])) if r else 0, "window": r.get("window") if r else None,
+                "quality_names": r["quality_names"] if r else [], "logged_sessions": n, "open_alerts": n_alerts,
+                "params": r.get("monitor") if r else None,
+                "novelty_space": (r["novelty"].meta if r else None)}
+
+    @app.post("/api/monitor/run", dependencies=[Depends(auth.require_admin)])
+    def monitor_run(window: int | None = None, alpha: float | None = None, alpha_novel: float | None = None,
+                    source: str | None = None):
+        params = {k: v for k, v in (("alpha", alpha), ("alpha_novel", alpha_novel)) if v is not None}
+        return run_window(sm, _ref(), bundle_version, window, params, source)
+
+    @app.post("/api/monitor/simulate", dependencies=[Depends(auth.require_admin)])
+    def monitor_simulate(scenario: str = "stationary", n: int = 200, seed: int = 0):
+        if scenario not in ("stationary", "domain_drift", "unseen_generator"):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "scenario must be stationary|domain_drift|unseen_generator")
+        return simulate(sm, _ref(), bundle_version, scenario, max(10, min(n, 2000)), seed)
+
+    @app.get("/api/monitor/reports", dependencies=[Depends(auth.require_admin)])
+    def monitor_reports(limit: int = 100):
+        with sm() as db:
+            rows = db.scalars(select(DriftReport).order_by(DriftReport.created_at.desc()).limit(max(1, min(limit, 500))))
+            return [{"id": r.id, "created_at": r.created_at, "window_start": r.window_start, "window_end": r.window_end,
+                     "label": r.label, "bundle_version": r.bundle_version,
+                     "confidence": r.multivariate.get("confidence"), "tests": r.multivariate.get("tests"),
+                     "features": [{k: f.get(k) for k in ("feature", "ks_q", "psi", "psi_crit", "drifted", "mean_shift_sd")}
+                                  for f in r.per_feature.get("features", [])]} for r in rows][::-1]
+
+    @app.get("/api/monitor/reports/{report_id}", dependencies=[Depends(auth.require_admin)])
+    def monitor_report(report_id: int):
+        with sm() as db:
+            r = db.get(DriftReport, report_id)
+            if r is None:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "report not found")
+            return {"id": r.id, "label": r.label, "window_start": r.window_start, "window_end": r.window_end,
+                    "bundle_version": r.bundle_version, "per_feature": r.per_feature, "multivariate": r.multivariate,
+                    "streaming": r.streaming}
+
+    @app.get("/api/monitor/alerts", dependencies=[Depends(auth.require_admin)])
+    def monitor_alerts(status_filter: str | None = None):
+        with sm() as db:
+            q = select(Alert).order_by(Alert.created_at.desc())
+            if status_filter:
+                q = q.where(Alert.status == status_filter)
+            return [{"id": a.id, "created_at": a.created_at, "type": a.type, "severity": a.severity,
+                     "confidence": a.confidence, "bundle_version": a.bundle_version, "status": a.status,
+                     "recommendation": a.recommendation, "evidence": a.evidence} for a in db.scalars(q.limit(200))]
+
+    @app.post("/api/monitor/alerts/{alert_id}/ack", dependencies=[Depends(auth.require_admin)])
+    def monitor_ack(alert_id: int):
+        with sm() as db:
+            a = db.get(Alert, alert_id)
+            if a is None:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "alert not found")
+            a.status, a.acknowledged_by = "acknowledged", "admin"
+            db.commit()
+        return {"ok": True}
+
     return app
 
 

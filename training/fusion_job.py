@@ -135,7 +135,11 @@ def build_sessions(heads: dict, seed: int = 0, doc_attack_frac: float = 0.3) -> 
                     m5 = {"m5": {**match_features(id_emb, vid_embs, id_rat, v.get("m5_ratios") or {}), **v["m5_geo"]}}
                 q = dict(v.get("quality") or {})
                 q["doc_blur_laplacian_var"] = (d.get("quality") or {}).get("blur_laplacian_var")
+                vec = np.r_[np.asarray(v["m2_vec"].get("clip_mean", np.full(512, np.nan)), np.float32),
+                            np.asarray(v["m3_vec"].get("lbp", np.full(354, np.nan)), np.float32)]
+                vclass = "bona_fide" if v["label"] == 1 else kinds[0] if kind != "doc_forgery" else "bona_fide"
                 sessions.append({"part": part, "label": int(kind == "bona_fide"), "attack_type": kind,
+                                 "video_class": vclass, "A": vec, "subject": f"{v['source']}:{v['group']}",
                                  "video_id": v["id"], "doc_id": d["id"], "video_source": v["source"],
                                  "P": {"M1": d["_pM1"], "M2": v["_pM2"], "M3": v["_pM3"], "M4": v["_pM4"]},
                                  "C": {"M1": d["_cM1"], "M2": v["_cM2"], "M3": v["_cM3"], "M4": v["_cM4"]},

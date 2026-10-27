@@ -3,6 +3,7 @@ import { Link, Route, Routes } from "react-router-dom";
 import { getPublicConfig, type PublicConfig } from "./api";
 import KycFlow from "./pages/KycFlow";
 import SessionResult from "./pages/SessionResult";
+import Monitor from "./pages/Monitor";
 
 export default function App() {
   const [cfg, setCfg] = useState<PublicConfig | null>(null);
@@ -31,12 +32,13 @@ export default function App() {
           Research prototype · Monitoring dashboard: milestone 5
         </nav>
       </header>
-      <main className="max-w-4xl mx-auto p-6">
+      <main className="max-w-6xl mx-auto p-6">
         {err && <p role="alert" className="text-red-700">Backend unreachable: {err}</p>}
         {cfg && (
           <Routes>
             <Route path="/" element={<KycFlow cfg={cfg} />} />
             <Route path="/session/:id" element={<SessionResult />} />
+            <Route path="/monitor" element={<Monitor />} />
           </Routes>
         )}
       </main>

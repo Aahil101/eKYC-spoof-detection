@@ -1,0 +1,32 @@
+job: build_reference
+run_name: build_reference
+implemented: true
+module: MONITOR
+seed: 0
+description: "Monitoring reference (FF++/MSU fusion_train), novelty model, sensitivity table, pilot drift-vs-novelty scenarios on real held-out features."
+params:
+  heads_dir: null
+  fusion_path: null
+  exclude_sources_from_reference: [celebdf]
+  holdout_classes: [deepfake_FaceShifter]     # novel attack for S2/S3 (leave-one-method-out)
+  prior_shift_class: deepfake_Face2Face
+  pca_k: 32
+  window: 200
+  repeats: 20
+  null_windows: 60
+  burn_in_frac: 0.4
+  novel_prevalence: 0.15
+  monitor: {alpha: 0.05, alpha_novel: 0.05, scorer: mahalanobis, min_cluster_size: 8, min_silhouette: 0.1,
+            min_cluster_frac_of_outliers: 0.3, n_perm: 100, max_n: 300}
+modes:
+  smoke: {repeats: 4, null_windows: 20}
+  full: {}
+checkpoint: {every_steps: 1000000, every_minutes: 1000, keep_last: 1}
+budget: {max_wall_minutes: 180}
+data:
+  datasets: [feats_ffpp, feats_celebdf, feats_msu, feats_sidtd, heads_latest, fusion_latest]
+kaggle:
+  accelerator: none
+  internet: true
+  pip_packages: [onnxruntime==1.31.0, scikit-learn==1.9.1]
+  weights_datasets: []
