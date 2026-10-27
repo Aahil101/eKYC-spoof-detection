@@ -188,7 +188,8 @@ class HeadArtifact:
 
 def fit_head(module: str, X: np.ndarray, y: np.ndarray, split: np.ndarray, names, vec_dims, vec_keys,
              scalar_key: str, kind: str = "hgb", calib: str = "isotonic", seed: int = 0,
-             feature_version: str = "", bpcer_target: float = 0.05) -> HeadArtifact:
+             feature_version: str = "", bpcer_target: float = 0.05,
+             sample_weight: np.ndarray | None = None) -> HeadArtifact:
     """split: array of 'train'|'cal'|'val'|'test'. y: 1 = genuine/bona fide, 0 = attack."""
     from sklearn.ensemble import HistGradientBoostingClassifier
     from sklearn.linear_model import LogisticRegression
@@ -207,13 +208,14 @@ def fit_head(module: str, X: np.ndarray, y: np.ndarray, split: np.ndarray, names
         from sklearn.pipeline import make_pipeline
         from sklearn.preprocessing import StandardScaler
         learner = make_pipeline(StandardScaler(), LogisticRegression(C=0.5, max_iter=3000, class_weight="balanced"))
-        learner.fit(np.where(np.isnan(X[tr]), mu, X[tr]), y[tr])
+        sw = None if sample_weight is None else sample_weight[tr]
+        learner.fit(np.where(np.isnan(X[tr]), mu, X[tr]), y[tr], logisticregression__sample_weight=sw)
     else:
         learner = HistGradientBoostingClassifier(max_iter=400, learning_rate=0.05, max_leaf_nodes=31,
                                                  l2_regularization=1.0, early_stopping=True,
                                                  validation_fraction=0.15, random_state=seed,
                                                  class_weight="balanced")
-        learner.fit(X[tr], y[tr])
+        learner.fit(X[tr], y[tr], sample_weight=None if sample_weight is None else sample_weight[tr])
     rng = np.random.default_rng(seed)
     ref_idx = rng.choice(np.flatnonzero(tr), size=min(2000, tr.sum()), replace=False)
     Z = (np.where(np.isnan(X[ref_idx]), mu, X[ref_idx]) - mu) / sd

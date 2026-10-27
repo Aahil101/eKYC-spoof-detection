@@ -76,7 +76,8 @@ def analyse_session(video_bytes: bytes, doc_img: np.ndarray | None, challenge, v
     res["doc"] = None
     if doc_img is not None:
         s1, v1 = m1_image_features(doc_img)
-        _, extra = E.m1_features(doc_img)
+        from ml.features.images import normalize_document
+        _, extra = E.m1_features(normalize_document(doc_img))
         res["doc"] = {"m1": s1, "m1_vec": v1, "ela_map": extra["ela_map"], "noise_map": extra["noise_map"]}
         res["doc_portrait"] = _doc_portrait(doc_img)
         if res["doc_portrait"]:

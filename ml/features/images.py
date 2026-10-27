@@ -34,8 +34,29 @@ def m3_image_features(img: np.ndarray, bbox) -> tuple[dict, dict, np.ndarray]:
     return s, {"lbp": X.colour_lbp(crop).astype(np.float32)}, crop
 
 
-def m1_image_features(img: np.ndarray) -> tuple[dict, dict]:
+def normalize_document(img: np.ndarray, width: int = 1024, quality: int = 90) -> np.ndarray:
+    """Remove dataset-level acquisition shortcuts before M1 forensics.
+
+    SIDTD forgeries were re-encoded differently from the genuine templates (global ELA/blockiness and
+    resolution differ), so a classifier on raw files learns 'which pipeline saved this file' and scores
+    AUC 1.0. Resampling to a fixed width (which destroys the original 8x8 JPEG grid alignment) and
+    re-encoding everything once at the same quality leaves mostly LOCAL inconsistencies (pasted regions,
+    inpainting) as evidence. Applied identically at training and serving time.
+    """
+    h, w = img.shape[:2]
+    out = cv2.resize(img, (width, max(1, round(h * width / w))), interpolation=cv2.INTER_AREA)
+    ok, enc = cv2.imencode(".jpg", out, [cv2.IMWRITE_JPEG_QUALITY, quality])
+    return cv2.imdecode(enc, cv2.IMREAD_COLOR) if ok else out
+
+
+M1_NORMALIZATION = "resize_w1024_jpeg_q90"
+
+
+def m1_image_features(img: np.ndarray, normalize: bool = True) -> tuple[dict, dict]:
+    if normalize:
+        img = normalize_document(img)
     s, extra = m1_features(img)
+    s.pop("m1_aspect", None)          # document layout prior, not forgery evidence
     return s, extra["vec"]
 
 

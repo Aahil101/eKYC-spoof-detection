@@ -14,7 +14,7 @@ from ml.features import biometrics as B
 from ml.features import forensics as X
 from ml.features import liveness as L
 
-FEATURE_VERSION = "fv1"   # bump when any extractor changes; heads record the version they were trained on
+FEATURE_VERSION = "fv2"   # fv2: M1 document normalisation (resize+re-encode); bump when any extractor changes
 
 
 class ClipEmbedder:

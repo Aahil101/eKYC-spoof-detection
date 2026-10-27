@@ -209,8 +209,9 @@ def _image_worker(args):
             s, vec, _ = I.m3_image_features(img, bb)
             res = {"m3": s, "m3_vec": vec}
         else:
-            s, vec = I.m1_image_features(img)
-            res = {"m1": s, "m1_vec": vec}
+            s, vec = I.m1_image_features(img, normalize=True)
+            s_raw, vec_raw = I.m1_image_features(img, normalize=False)
+            res = {"m1": s, "m1_vec": vec, "m1raw": s_raw, "m1raw_vec": vec_raw}
         res["quality"] = compute_quality([img], {"width": img.shape[1], "height": img.shape[0]}, None)
         return item, res, None
     except Exception as e:
@@ -423,23 +424,55 @@ def train_heads(cfg: dict, ctx) -> dict:
             extra["cross_celebdf_test"] = pad_metrics(pc, np.array([r["label"] for r in cdf]))
         save(art, extra)
 
-    # ---------------- M3 replay/PAD: CelebA-Spoof images; cross-dataset MSU-MFSD videos
+    # ---------------- M3 replay/PAD: CelebA-Spoof images + MSU-MFSD train subjects (video attacks)
+    #                  + FF++ train originals (bona fide compressed video). Image-only training did not
+    #                  transfer to video (MSU AUC 0.43, 89% of genuine FF++ videos rejected) - see MODULES.md.
     if "M3" in p["modules"]:
         cs = load_records("celeba_spoof")
-        X, names, vd, _ = build_matrix(cs, "m3", ("lbp",))
-        y = np.array([r["label"] for r in cs])
-        gs = group_split([r["group"] for r in cs], seed, (0.85, 0.15, 0.0, 0.0))
-        split = np.array(["test" if r["split"] == "test" else s for r, s in zip(cs, gs)])
-        art = fit_head("M3", X, y, split, names, vd, ("lbp",), "m3", kind="hgb", calib="isotonic", seed=seed,
-                       feature_version=FEATURE_VERSION)
-        art.data_info = {"train_data": "CelebA-Spoof Kaggle mirror (subset, official intra-test labels)",
-                         "counts": counts(cs, split)}
         msu = load_records("msu_mfsd")
+        ffr = [r for r in load_records("ffpp_c23") if r["label"] == 1]
+        recs, split_l, w = [], [], []
+        gs = group_split([r["group"] for r in cs], seed, (0.85, 0.15, 0.0, 0.0))
+        for r, s in zip(cs, gs):
+            recs.append(r); split_l.append("test" if r["split"] == "test" else s); w.append(1.0)
+        n_cs_tr = sum(1 for s in split_l if s == "train")
+        ms_inner = group_split([r["group"] for r in msu], seed, (0.75, 0.25, 0.0, 0.0))
+        n_ms_tr = sum(1 for r, s in zip(msu, ms_inner) if r["split"] == "train" and s == "train")
+        n_ff_tr = sum(1 for r in ffr if r["split"] == "train")
+        w_msu = float(p.get("m3_weight_msu", 0.5)) * n_cs_tr / max(1, n_ms_tr)
+        w_ff = float(p.get("m3_weight_ffpp_real", 0.25)) * n_cs_tr / max(1, n_ff_tr)
+        for r, s in zip(msu, ms_inner):
+            recs.append(r); split_l.append("test" if r["split"] == "test" else s); w.append(w_msu)
+        ff_held = []
+        for r in ffr:
+            if r["split"] == "train":
+                recs.append(r); split_l.append("train"); w.append(w_ff)
+            elif r["split"] == "val":
+                recs.append(r); split_l.append("cal"); w.append(w_ff)
+            else:
+                ff_held.append(r)
+        split = np.array(split_l)
+        X, names, vd, _ = build_matrix(recs, "m3", ("lbp",))
+        y = np.array([r["label"] for r in recs])
+        art = fit_head("M3", X, y, split, names, vd, ("lbp",), "m3", kind="hgb", calib="isotonic", seed=seed,
+                       feature_version=FEATURE_VERSION, sample_weight=np.array(w))
+        art.data_info = {"train_data": "CelebA-Spoof subset (images) + MSU-MFSD train subjects (video) + "
+                         "FF++ c23 train/val originals (bona fide video)",
+                         "sample_weights": {"celeba_spoof": 1.0, "msu_mfsd": round(w_msu, 2), "ffpp_real": round(w_ff, 2)},
+                         "counts": counts(recs, split)}
         extra = {}
-        if msu:
-            Xm, *_ = build_matrix(msu, "m3", ("lbp",), names, vd)
-            pm, _, _ = art.predict(Xm)
-            extra["cross_msu_all"] = pad_metrics(pm, np.array([r["label"] for r in msu]))
+        src = np.array([r["source"] for r in recs])
+        for name, mask in (("test_celeba_spoof", (split == "test") & (src == "celeba_spoof")),
+                           ("test_msu_video", (split == "test") & (src == "msu"))):
+            pt, _, _ = art.predict(X[mask])
+            extra[name] = pad_metrics(pt, y[mask])
+        held = ff_held + [r for r in load_records("celebdf_v2") if r["label"] == 1]
+        for name, rs in (("ffpp_test_real_videos", ff_held), ("celebdf_real_videos", held[len(ff_held):])):
+            if rs:
+                Xh, *_ = build_matrix(rs, "m3", ("lbp",), names, vd)
+                ph, _, _ = art.predict(Xh)
+                extra[f"false_reject_rate_{name}"] = {"n": len(rs), "frac_p_below_0.5": float((ph < 0.5).mean()),
+                                                      "mean_p": float(ph.mean())}
         save(art, extra)
 
     # ---------------- M4 liveness: MSU-MFSD official subject protocol (train 15 / test 20 subjects)
@@ -456,17 +489,24 @@ def train_heads(cfg: dict, ctx) -> dict:
                          "note": "challenge-response compliance is rule-based (not learned) - no public data"}
         save(art)
 
-    # ---------------- M1 document: SIDTD templates, template-disjoint split
+    # ---------------- M1 document: SIDTD templates, template-disjoint split, normalised documents (fv2)
     if "M1" in p["modules"]:
+        from ml.features.images import M1_NORMALIZATION
         sd = load_records("sidtd")
-        X, names, vd, _ = build_matrix(sd, "m1", ("spectrum",))
-        y = np.array([r["label"] for r in sd])
         split = group_split([r["group"] for r in sd], seed)
+        y = np.array([r["label"] for r in sd])
+        extra = {}
+        if all("m1raw" in r for r in sd):   # ablation: raw files (shortcut) vs normalised
+            Xr, nr, vdr, _ = build_matrix(sd, "m1raw", ("spectrum",))
+            raw = fit_head("M1", Xr, y, split, nr, vdr, ("spectrum",), "m1raw", kind="hgb", calib="isotonic",
+                           seed=seed, feature_version=FEATURE_VERSION)
+            extra["ablation_raw_files_test"] = raw.metrics.get("test")
+        X, names, vd, _ = build_matrix(sd, "m1", ("spectrum",))
         art = fit_head("M1", X, y, split, names, vd, ("spectrum",), "m1", kind="hgb", calib="isotonic",
                        seed=seed, feature_version=FEATURE_VERSION)
         art.data_info = {"train_data": "SIDTD templates (reals vs crop&replace / inpainting fakes)",
-                         "counts": counts(sd, split)}
-        save(art)
+                         "normalization": M1_NORMALIZATION, "counts": counts(sd, split)}
+        save(art, extra)
 
     # ---------------- M5 face match: Celeb-DF real identities (+ FF++ originals as extra impostors)
     if "M5" in p["modules"]:
