@@ -21,7 +21,7 @@ A research-grade Video-KYC fraud detection system with two dashboards (KYC decis
 | 2 | Skeleton, encrypted session logging, Kaggle infra | done (Docker verified, Kaggle round trip verified) |
 | 3 | Real modules M1–M5 + Kaggle feature extraction + head training | **in progress** (see below) |
 | 4 | Fusion F0–F6, calibrated thresholds (E4), veto, Dashboard 1 polish | not started |
-| 5 | Drift + novelty + drift-vs-novelty rule + Dashboard 2 | not started |
+| 5 | Drift + novelty + drift-vs-novelty rule + Dashboard 2 | **done (implementation)**; novelty detection NOT effective in the current artifact space, see docs/MONITORING.md |
 | 6 | Experiments E1–E10 + paper outline | not started |
 
 ### Milestone 3 status (as of commit time)
