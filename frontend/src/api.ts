@@ -33,6 +33,10 @@ export type SessionOut = {
   decision: string | null;
   decision_reason: string | null;
   fused_score: number | null;
+  fused_uncertainty?: number | null;
+  fusion_strategy?: string | null;
+  fusion_weights?: { strategy?: string; per_module?: Record<string, number | null>; thresholds?: { t_high: number; t_low: number } } | null;
+  veto_module?: string | null;
   error: string | null;
   challenge: ChallengeStep[];
   video_meta: Record<string, unknown> | null;

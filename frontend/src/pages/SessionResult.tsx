@@ -63,6 +63,19 @@ export default function SessionResult() {
           </p>
         )}
         {s.decision_reason && <p className="text-slate-700">{s.decision_reason}</p>}
+        {s.fused_score !== null && (
+          <div className="text-sm text-slate-700 space-y-1">
+            <p>Fused score (P genuine): <strong>{fmt(s.fused_score, 4)}</strong>
+              {s.fusion_weights?.thresholds && <> · accept ≥ {fmt(s.fusion_weights.thresholds.t_high, 4)} · reject &lt; {fmt(s.fusion_weights.thresholds.t_low, 4)}</>}
+              {s.fusion_strategy && <> · fusion {s.fusion_strategy}</>}</p>
+            {s.fusion_weights?.per_module && (
+              <p>Module weights used: {Object.entries(s.fusion_weights.per_module).map(([m, w]) =>
+                `${m} ${w === null ? "n/a" : (w as number).toFixed(2)}`).join(" · ")}
+                {s.fusion_strategy === "F3" && <span className="text-xs text-slate-500"> (gradient-boosted stacking: no per-session linear weights; see top features)</span>}</p>
+            )}
+            {s.veto_module && <p className="text-red-700">Veto by {s.veto_module}.</p>}
+          </div>
+        )}
         <p className="text-xs text-slate-500">Model bundle: {s.bundle_version ?? "—"}</p>
       </div>
 

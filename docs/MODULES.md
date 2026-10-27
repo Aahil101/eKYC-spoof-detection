@@ -32,6 +32,20 @@ Every module follows the same contract: `predict(session) -> ModuleOutput(score 
 | vosk_small_en | alphacephei.com vosk-model-small-en-us-0.15 | listed as Apache-2.0 on the model page (to verify) |
 | CLIP ViT-B/16 openai | open_clip / Hugging Face hub cache | OpenAI CLIP model card (to verify) |
 
+## Update 2026-10-28: heads v3 (`codmav-train-heads` v3, feature version fv2, served in `kyc-v0.4`)
+
+**M3 fixed (domain gap).** Training now mixes CelebA-Spoof images, MSU-MFSD *train* subjects (video attacks, weight ×87.7) and FF++ train/val originals (bona fide video, weight ×5.8). These recipes were compared locally first:
+
+| M3 training mix | MSU test (video) AUC | FF++ genuine videos wrongly rejected | CelebA-Spoof test AUC |
+|---|---|---|---|
+| CelebA-Spoof only (old) | 0.43 | 89% | 0.99 |
+| MSU train only | 0.95 | 11% | 0.48 |
+| **CelebA-Spoof + MSU train + FF++ real (chosen)** | **0.914** (Kaggle run) | **1.4%** (0% on 889 Celeb-DF real) | **0.979** |
+
+**M1 shortcut removed, and a stronger problem found.** Documents are now normalised before forensics (resize to 1024 px wide plus one JPEG q90 re-encode; `m1_aspect` dropped). The best single feature fell from AUC 1.00 to 0.64. A grouping bug was also fixed: `rus_internalpassport` file names did not match the template regex, so each image was its own group and genuine/fake versions of the same template could fall on both sides of the split.
+
+The model still scores AUC 1.00 on template-disjoint test (the raw-file ablation also scores 1.00), because every document type appears in training. **Leave-one-document-type-out AUC is 0.548 on average** (per type: aze_passport 1.00, svk_id 0.78, rus 0.59, fin 0.53, grc 0.51, alb 0.50, est 0.50, srb 0.50, lva 0.46, esp 0.12). M1 learns what each design's forgeries look like and **does not generalise to unseen document designs**. This is the deployment-relevant number and must be reported as M1's result. Fusion uses M1 only for SIDTD-like documents; any real deployment needs per-design data or a design-agnostic detector (TruFor-style plug-in, future work).
+
 ## Results (bundle `kyc-v0.3`, Kaggle run `codmav-train-heads` v1 (all five heads), feature version fv1, seed 0)
 
 Single run with no CIs yet; bootstrap CIs and seeds come in E1. Score = P(genuine). APCER is measured at BPCER = 5%.
