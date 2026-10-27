@@ -207,9 +207,17 @@ def train_fusion(cfg: dict, ctx) -> dict:
         mm = fit_fusion(best, drop(fi_tr), y_tr, seed)
         pt, _, _ = mm.predict(drop(fi_te))
         report["leave_one_out_test"][f"without_{mod}"] = _metrics(pt, y_te)
-    # ---- policy on fusion_train (data-driven thresholds + veto)
+    # ---- policy on fusion_train, using OUT-OF-FOLD fused scores (5-fold by video) so thresholds are not
+    #      chosen on scores the fusion model was fitted on (that was over-optimistic: train APCER 1% -> test 32%)
     model = models[best]
-    p_tr, _, _ = model.predict(fi_tr)
+    folds = group_split([s["video_id"] for s in tr], seed + 1, (0.2, 0.2, 0.2, 0.4))
+    folds = np.where(folds == "test", np.where(np.arange(len(tr)) % 2 == 0, "f3", "f4"), folds)
+    p_tr = np.full(len(tr), np.nan)
+    for f in np.unique(folds):
+        held = folds == f
+        mf = fit_fusion(best, fi_tr.subset(~held), y_tr[~held], seed)
+        p_tr[held] = mf.predict(fi_tr.subset(held))[0]
+    report["policy_fit_scores"] = "out-of-fold (5 group folds over fusion_train)"
     t_high, t_low = choose_thresholds(p_tr, y_tr, at_tr, float(p["apcer_max"]), float(p["bpcer_max"]))
     # veto eligibility: module AUC on fusion_train restricted to genuine + the attacks it targets
     from sklearn.metrics import roc_auc_score

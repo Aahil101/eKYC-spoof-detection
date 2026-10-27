@@ -12,7 +12,7 @@ missing -> NaN) and the capture-quality vector q.
   F5 evidential Dempster-Shafer fusion of binomial opinions (b_g = c p, b_f = c (1-p), u = 1 - c),
      reduced DS rule as in TMC ([57,58]); fused P = b_g + u/2, then isotonic calibration
   F6 F5 with quality-gated discounting: c_i' = c_i * (w_i / max_j w_j) using F4's gate
-Every strategy's output is calibrated (isotonic) on fusion-train; reported weights are the ones actually used.
+Every strategy's output is calibrated (Platt, continuous) on fusion-train; reported weights are the ones actually used.
 """
 from __future__ import annotations
 
@@ -180,11 +180,33 @@ class FusionModel:
 
     def predict(self, fi: FusionInput) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         s, w, u = self._raw(fi)
-        return np.clip(self.calibrator.predict(s), 1e-4, 1 - 1e-4), w, u
+        return np.clip(self.calibrator.predict(s), 1e-6, 1 - 1e-6), w, u
+
+
+class PlattCal:
+    """Monotone, CONTINUOUS calibration (logistic on the raw score). Isotonic regression was tried first:
+    its step function put ~16% of genuine sessions on one plateau, so no threshold between plateaus existed
+    and every APCER target produced the same operating point."""
+
+    def __init__(self, on_probability: bool):
+        self.on_probability = on_probability
+        self.a, self.b = 1.0, 0.0
+
+    def _x(self, s):
+        s = np.asarray(s, float)
+        return _logit(s) if self.on_probability else s
+
+    def fit(self, s, y):
+        from sklearn.linear_model import LogisticRegression
+        lr = LogisticRegression(C=1e4, max_iter=1000).fit(self._x(s)[:, None], y)
+        self.a, self.b = float(lr.coef_[0, 0]), float(lr.intercept_[0])
+        return self
+
+    def predict(self, s):
+        return 1 / (1 + np.exp(-(self.a * self._x(s) + self.b)))
 
 
 def fit_fusion(strategy: str, fi: FusionInput, y: np.ndarray, seed: int = 0) -> FusionModel:
-    from sklearn.isotonic import IsotonicRegression
     from sklearn.metrics import roc_auc_score
     m = FusionModel(strategy)
     if strategy == "F1":
@@ -214,7 +236,7 @@ def fit_fusion(strategy: str, fi: FusionInput, y: np.ndarray, seed: int = 0) -> 
     elif strategy in ("F4", "F6"):
         m.gate = _Gate(fi.Q.shape[1] + 10, 5, seed=seed).fit(fi, y)
     raw, _, _ = m._raw(fi)
-    m.calibrator = IsotonicRegression(out_of_bounds="clip", y_min=1e-4, y_max=1 - 1e-4).fit(raw, y)
+    m.calibrator = PlattCal(on_probability=strategy in ("F0", "F5", "F6")).fit(raw, y)
     return m
 
 
