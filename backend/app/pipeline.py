@@ -55,7 +55,61 @@ def _jsonable(x):
     return x
 
 
-def decide(outputs: list[ModuleOutput], policy: dict) -> dict:
+def load_fusion(bundle_dir: Path | None):
+    """FUSION/fusion.pkl from the (hash-verified) bundle, or None."""
+    if bundle_dir is None:
+        return None
+    f = bundle_dir / "FUSION" / "fusion.pkl"
+    if not f.exists():
+        return None
+    import pickle
+    with open(f, "rb") as fh:
+        return pickle.load(fh)
+
+
+def decide(outputs: list[ModuleOutput], policy: dict, fusion: dict | None = None,
+           quality: dict | None = None) -> dict:
+    """Fusion + data-driven policy from the bundle; UNAVAILABLE when either is missing (no guessed numbers)."""
+    import numpy as np
+    ok = [o for o in outputs if o.status == "ok"]
+    if not ok:
+        return {"decision": "UNAVAILABLE", "reason": "No trained modules in the active bundle "
+                "(all modules are placeholders). No score was produced.", "fused_score": None,
+                "fused_uncertainty": None, "weights": {}, "veto": None}
+    m4 = next((o for o in ok if o.module == "M4"), None)
+    challenge_failed = bool(m4 and m4.explanations.get("challenge_failed"))
+    if fusion is None:
+        return {"decision": "UNAVAILABLE", "reason": "Per-module scores are available, but the bundle has no "
+                "calibrated fusion/decision policy (FUSION/fusion.pkl)."
+                + (" Liveness challenge not completed." if challenge_failed else ""),
+                "fused_score": None, "fused_uncertainty": None, "weights": {}, "veto": None}
+    from ml.fusion import MODULES, FusionInput, quality_matrix
+    by = {o.module: o for o in ok}
+    P = np.array([[by[m].score if m in by else np.nan for m in MODULES]], float)
+    C = np.array([[by[m].confidence if m in by else np.nan for m in MODULES]], float)
+    fi = FusionInput(P, C, quality_matrix([quality or {}]))
+    p, w, u = fusion["model"].predict(fi)
+    pol = fusion["policy"]
+    Pd = {m: (by[m].score if m in by else None) for m in MODULES}
+    Cd = {m: (by[m].confidence if m in by else None) for m in MODULES}
+    decision, veto, reason = pol.decide(float(p[0]), Pd, Cd, challenge_failed)
+    if decision == "REJECT" and veto is None:
+        worst = min(ok, key=lambda o: o.score)
+        reason = f"{reason} Lowest check: {worst.module} ({_REASON.get(worst.module, worst.module)})."
+    weights = {m: (None if not np.isfinite(w[0, j]) else round(float(w[0, j]), 4)) for j, m in enumerate(MODULES)}
+    return {"decision": decision, "reason": reason, "fused_score": float(p[0]),
+            "fused_uncertainty": None if not np.isfinite(u[0]) else float(u[0]),
+            "weights": {"strategy": fusion["strategy"], "per_module": weights,
+                        "thresholds": {"t_high": pol.t_high, "t_low": pol.t_low}, "veto": pol.veto},
+            "veto": veto}
+
+
+_REASON = {"M1": "the ID document looks altered or recaptured", "M2": "the video may be a deepfake",
+           "M3": "the video may be a replay from a screen or photo", "M4": "liveness could not be confirmed",
+           "M5": "the face does not match the ID photo"}
+
+
+def _legacy_decide(outputs: list[ModuleOutput], policy: dict) -> dict:
     """Decision policy stub honouring the no-fake-numbers rule (fusion arrives in milestone 4)."""
     ok = [o for o in outputs if o.status == "ok"]
     th = policy.get("thresholds") or {}
@@ -83,6 +137,7 @@ class Pipeline:
         self.policy = policy
         self.bundle_version = bundle_version
         self.modules = build_modules(bundle_dir)
+        self.fusion = load_fusion(bundle_dir)
         self.media_ttl = dt.timedelta(days=media_ttl_days)
         self.log_ttl = dt.timedelta(days=log_ttl_days)
 
@@ -128,7 +183,7 @@ class Pipeline:
                     log.error("module_failed", module=name, error=str(e))
                     outputs.append(ModuleOutput(module=name, status="failed", model_version=mod.version,
                                                 message=f"{type(e).__name__}: {e}"))
-            result = decide(outputs, self.policy)
+            result = decide(outputs, self.policy, self.fusion, q)
             self._persist(session_id, outputs, q, vid.meta, doc_meta, result, analysis)
             log.info("session_processed", session_id=session_id, decision=result["decision"],
                      bundle_version=self.bundle_version)
@@ -173,7 +228,7 @@ class Pipeline:
             s.decision_reason = result["reason"]
             s.fused_score = result["fused_score"]
             s.fused_uncertainty = result["fused_uncertainty"]
-            s.fusion_strategy = self.policy.get("fusion_strategy")
+            s.fusion_strategy = (result.get("weights") or {}).get("strategy")
             s.fusion_weights = result["weights"]
             s.veto_module = result["veto"]
             s.media_expires_at = now + self.media_ttl

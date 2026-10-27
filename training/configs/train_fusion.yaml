@@ -1,0 +1,26 @@
+job: train_fusion
+run_name: train_fusion
+implemented: true
+module: FUSION
+seed: 0
+description: "Composite KYC sessions from held-out module data; fusion F0-F6 comparison; data-driven thresholds + veto."
+params:
+  heads_dir: null              # default: attached train_heads output
+  strategies: [F0, F1, F2, F3, F4, F5, F6]
+  apcer_max: 0.01              # worst-case per-attack-type acceptance rate for T_high
+  bpcer_max: 0.02              # bona fide rejection rate for T_low
+  veto_false_trigger_max: 0.001
+  veto_min_conf: 0.5
+  veto_min_auc: 0.85           # a module may veto only if it is reliable on its target attacks (fusion_train)
+modes:
+  smoke: {}
+  full: {}
+checkpoint: {every_steps: 1000000, every_minutes: 1000, keep_last: 1}
+budget: {max_wall_minutes: 120}
+data:
+  datasets: [feats_ffpp, feats_celebdf, feats_msu, feats_sidtd, heads_latest]
+kaggle:
+  accelerator: none
+  internet: true
+  pip_packages: [onnxruntime==1.31.0, scikit-learn==1.9.1]
+  weights_datasets: []

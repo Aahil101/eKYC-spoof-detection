@@ -111,6 +111,7 @@ datasets:
   feats_msu: {module: [M3, M4], kind: kernel_output, kaggle_ref: aahil1011/codmav-feats-msu, verified: true, max_local_mb: 0}
   feats_celebaspoof: {module: [M3], kind: kernel_output, kaggle_ref: aahil1011/codmav-feats-celebaspoof, verified: true, max_local_mb: 0}
   feats_sidtd: {module: [M1], kind: kernel_output, kaggle_ref: aahil1011/codmav-feats-sidtd, verified: true, max_local_mb: 0}
+  heads_latest: {module: [M1, M2, M3, M4, M5], kind: kernel_output, kaggle_ref: aahil1011/codmav-train-heads, verified: true, max_local_mb: 0}
 
   # Institution-gated, later maybe (PES University affiliation): not required by any milestone.
   doctamper: {module: [M1], kind: dataset, kaggle_ref: null, verified: false, gated: true,
