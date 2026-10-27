@@ -233,6 +233,16 @@ def train_fusion(cfg: dict, ctx) -> dict:
     no_veto = DecisionPolicy(t_high, t_low, {}, pol.targets)
     report["policy"]["fusion_test_without_veto"] = evaluate_policy(no_veto, p_te, fi_te.P, fi_te.C, y_te, at_te)
     report["mean_weights_test"] = {MODULES[j]: float(np.nanmean(w_te[:, j])) for j in range(5)}
+    # ---- operating points (E4): APCER target -> thresholds chosen on fusion_train, rates measured on fusion_test
+    ops = []
+    for amax in p.get("operating_points_apcer", [0.005, 0.01, 0.02, 0.05, 0.10]):
+        th, tl = choose_thresholds(p_tr, y_tr, at_tr, float(amax), float(p["bpcer_max"]))
+        e = evaluate_policy(DecisionPolicy(th, tl, veto, {}), p_te, fi_te.P, fi_te.C, y_te, at_te)
+        ops.append({"apcer_target": amax, "t_high": th, "t_low": tl,
+                    "test_genuine_auto_accept": e["genuine"]["ACCEPT"], "test_genuine_review": e["genuine"]["HUMAN_REVIEW"],
+                    "test_genuine_reject": e["genuine"]["REJECT"], "test_apcer_worst_type": e["apcer_accept_worst_type"],
+                    "test_apcer_overall": e["apcer_accept_overall"]})
+    report["operating_points"] = ops
     ctx.save_artifact("fusion.pkl", pickle.dumps({"strategy": best, "model": model, "policy": pol,
                                                   "modules": list(MODULES), "quality_keys": list(
                                                       __import__("ml.fusion", fromlist=["QUALITY_KEYS"]).QUALITY_KEYS)},
