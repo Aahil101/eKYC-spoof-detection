@@ -102,7 +102,24 @@ export default function KycFlow({ cfg }: { cfg: PublicConfig }) {
       )}
 
       {step === "video" && session && (
-        <Recorder challenge={session.challenge} durationMs={session.duration_ms} onDone={onVideo} />
+        <>
+          <Recorder challenge={session.challenge} durationMs={session.duration_ms} onDone={onVideo} />
+          {cfg.demo_mode && (
+            <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 space-y-2">
+              <label htmlFor="vidfile" className="block text-sm font-medium">
+                Demo mode only: upload a video file instead of recording (e.g. a dataset clip to test deepfake detection).
+                Challenge-response liveness cannot be verified for uploaded files.
+              </label>
+              <input id="vidfile" type="file" accept="video/mp4,video/webm,video/quicktime"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (!f) return;
+                  if (f.size > cfg.max_video_bytes) return setError("File too large.");
+                  onVideo(f);
+                }} />
+            </div>
+          )}
+        </>
       )}
 
       {step === "submitting" && <p>Uploading and queueing analysis…</p>}
