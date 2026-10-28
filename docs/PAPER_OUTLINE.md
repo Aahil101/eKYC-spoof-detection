@@ -33,15 +33,16 @@ Remote video-KYC combines document forensics, deepfake detection, presentation-a
 |---|---|---|---|---|
 | E1 | Module performance and generalisation | done | M2 FF++ AUC 0.871 [0.849, 0.896] → Celeb-DF 0.769 [0.735, 0.806]; M3 MSU video 0.914 [0.853, 0.962]; M4 0.691 [0.586, 0.788]; M5 0.995 [0.985, 1.0]; M1 seen designs 1.000 but **unseen designs 0.548** | `experiments/results/tables/e1_e3.md`, `docs/MODULES.md` |
 | E1b | Image-trained PAD on video | done | CelebA-Spoof-only M3 on MSU video: AUC 0.43, 89% of genuine FF++ videos rejected → adding video data: 0.914, 1.4% | `docs/MODULES.md` |
-| E2 | Calibration | partial | ECE per module in E1; temperature scaling made M2's test ECE slightly worse (0.129 → 0.150): calibration shift between FF++ val and test | heads report |
+| E2 | Calibration | done | Reliability diagrams: M2 overestimates P(genuine) on FF++ (ECE 0.146 [0.119, 0.174]) and Celeb-DF (0.138); M3 CelebA-Spoof 0.023; M4 0.125; fused F3 0.057 [0.041, 0.077] | `docs/figures/e2_reliability.png`, `docs/EXPERIMENTS.md` |
 | E3 | Fusion ablation (5 seeds) | done | F3 0.963±0.005 > F2 0.956 > F1 0.931 > F4 0.917 > F6 0.878 > F0 0.868 > F5 0.725. F3−F1 +0.036 [+0.026, +0.047]; **F4−F1 −0.005 [−0.020, +0.011] (n.s.)**; F6−F5 +0.180 [+0.154, +0.208] | `e1_e3.md` |
 | E4 | Thresholds and veto | done | APCER target 1% (worst type) → test 5.1% (FaceShifter); genuine 55.8% accept / 42.2% review / 2.0% reject; veto not certifiable with 321 genuine samples | `docs/FUSION.md` |
 | E5 | Corruption sensitivity and drift detection | done | M2 loses 0.13–0.24 AUC under blur/downscale/JPEG/low-light/noise; M3/M4 ≤0.04. Drift detected in 100% of windows for all 5 corruptions, 0% alarms on the same videos uncorrupted, corrupted feature in top-3 attribution 100%; false novelty 30–40% for downscale/JPEG | `docs/EXPERIMENTS.md` |
-| E6 | Novel-attack detection (leave-one-method-out) | done (negative) | Held-out FaceShifter AUROC 0.39–0.57 in every space tried (CLIP+LBP, forgery vector, PCA/LDA); Celeb-DF fakes 0.70–0.92, **but Celeb-DF genuine (control) 0.76–0.86**, so this is domain, not forgery novelty | `docs/MONITORING.md`, build_reference report |
+| E6 | Novel-attack detection (leave-one-method-out) | done (weak) | Unsupervised spaces: held-out FaceShifter AUROC 0.39–0.57; Celeb-DF genuine control 0.76–0.86 (domain, not forgery). **Supervised-contrastive attribution embedding (E6b, 5 methods × 3 seeds): mean held-out AUROC 0.639 (kNN) vs 0.576 (PCA); control drops to 0.54–0.69** — better and less domain-confounded, but far from usable | `docs/EXPERIMENTS.md` |
 | E7 | Drift vs novelty (6 scenarios × 20 windows) | done | Proposed rule: macro accuracy 0.45, **false-novelty rate 0.00 in every scenario**. OOD-rate-only baseline: 0.40 with **95% false novelty under domain drift**. Rule without quality conditioning: 0.475 | build_reference report (`e7.py`) |
 | E7b | iid vs subject-level null | done | stationary windows flagged as drift: 100% (iid) → 10% (subject-level null) | `docs/MONITORING.md` |
-| E9 | Latency | measured | 8–37 s per session on laptop CPU (warm 8–15 s) | `docs/FUSION.md` |
-| E10 | Bias / failure audit | not done | needs attribute labels (CelebA-Spoof attributes available) | — |
+| E8 | Closed loop: act on the recommendation | done | Retraining M2 with the recommended corruption on half of the test subjects recovers 17–29% of the lost AUC on the other half (e.g. low light 0.667 → 0.736, JPEG 0.716 → 0.759) without hurting clean AUC; adding the same subjects clean gives no gain. Under corruption the fixed sum rule F1 degrades least; quality gating (F4) is not more robust | `docs/EXPERIMENTS.md` |
+| E9 | Latency | measured | End-to-end /submit median 11.4 s (warm-up 14.9 s) on an 8-thread laptop CPU, no GPU | `docs/EXPERIMENTS.md` |
+| E10 | Subgroup audit (capture conditions) | done (no demographics) | No demographic labels exist in the extracted data. Capture subgroups: M3 genuine false-reject laptop 0.45 vs Android 0.15 (MSU); M2 BPCER 0.31 in the blurriest tertile vs 0.15 in the sharpest; genuine MSU sessions go to human review 97.5% vs FF++ 41.6% / Celeb-DF 25.4% | `docs/EXPERIMENTS.md` |
 
 ## 5. Contributions (reframed to what the evidence supports)
 1. **C1, monitoring methodology (strongly supported):** naive iid two-sample and binomial OOD tests are invalid on biometric streams, because sessions are clustered by person. A subject-level empirical null cuts stationary false alarms from 100% to 10% at α = 0.05. *Experiment: E7b.*
@@ -54,7 +55,7 @@ Remote video-KYC combines document forensics, deepfake detection, presentation-a
    - certified veto thresholds;
    - all configs, Kaggle notebooks and hashes released.
    *Experiments: E1, E1b, E4.*
-5. **C5, interventional recommendations (supported):** controlled corruptions show which module degrades under which capture condition. The frozen-CLIP deepfake detector loses 0.13–0.24 AUC under every common degradation, while texture PAD and liveness stay within 0.04. The monitor detects every corruption, attributes it to the right quality feature (top-3: 100%), and the recommender targets M2. *Experiments: E5a/E5b.* Not yet shown: that following the recommendation recovers performance (E8 closed loop).
+5. **C5, interventional recommendations, closed loop (supported):** controlled corruptions show which module degrades under which capture condition. The frozen-CLIP deepfake detector loses 0.13–0.24 AUC under every common degradation, while texture PAD and liveness stay within 0.04. The monitor detects every corruption, attributes it to the right quality feature (top-3: 100%), and the recommender targets M2. Following the recommendation recovers 17–29% of the lost AUC on unseen subjects, and the gain is not a data-quantity effect (E8a control). *Experiments: E5a/E5b, E8a.*
 
 ## 6. Limitations (all go in the paper)
 - Composite sessions make fraud signals independent across modules by construction.
@@ -69,16 +70,17 @@ Remote video-KYC combines document forensics, deepfake detection, presentation-a
 - Biometric data: only public research datasets under their original licences (Kaggle mirrors do not change those terms). No real ID documents.
 - Privacy by design: encrypted media with retention TTL, no raw biometrics in logs, encrypted identity templates, erasure endpoint. GDPR Art. 9 and the DPDP Act are discussed in `docs/PRIVACY.md`.
 - Dual use: the system describes detection only and releases no attack tooling.
-- Demographic performance was not audited (E10 pending). This must be stated, and no fairness claims are made.
+- Demographic performance could not be audited: no dataset as used carries demographic labels. E10 audits capture subgroups only (device, blur, illumination) and finds large gaps (e.g. laptop genuine false-reject 0.45 vs Android 0.15). No fairness claims are made.
 
 ## 8. Candidate venues (no acceptance is promised)
 - **IEEE Access:** fits a full-system paper with an honest negative result (C1–C4).
 - **Pattern Recognition Letters:** a short paper focused on C1 + C2 (monitoring methodology).
-- Stretch: **IJCB** or **IEEE T-BIOM**, if E5 supports C5 and a forgery-specific representation makes C2's detection side work.
+- Stretch: **IJCB** or **IEEE T-BIOM**: C5 is now supported end-to-end (E5 + E8); the detection side of C2 remains weak (E6b 0.64), which reviewers at these venues will press on.
 - A workshop at a vision conference (e.g. a WACV workshop) for the drift-vs-novelty idea alone.
 
 ## 9. What would most strengthen the paper (next work)
-1. A **forgery-attribution embedding** (supervised-contrastive over known methods) so that a held-out method becomes OOD, then re-run E6/E7.
-2. **E8 closed loop:** fine-tune or augment M2 on the recommended corruption and measure recovery. Also test whether quality gating (F4/F6) helps on corrupted composite sessions.
-3. **More unseen generators:** SadTalker/SimSwap from the DF40 slice, plus DFDC.
-4. **E10 bias audit** on CelebA-Spoof attributes.
+1. **Novelty representation:** the attribution embedding helps (0.58 → 0.64) but is trained on 541-d frozen features. Fine-tuning a forgery backbone (e.g. SBI/EfficientNet) end-to-end with SupCon, and evaluating on DF40-style unseen generators, is the main open problem.
+2. **More unseen generators:** SadTalker/SimSwap from the DF40 slice, plus DFDC.
+3. **Real KYC captures** (consented pilot) to remove the composite-session independence assumption.
+4. **Demographic audit** with a labelled dataset (e.g. CASIA-SURF CeFA ethnicity labels, licence permitting).
+5. Calibration under shift: M2 ECE ~0.14 suggests re-calibrating on a held-out deployment window (recommendation already emitted by the monitor).

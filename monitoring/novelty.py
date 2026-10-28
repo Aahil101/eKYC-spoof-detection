@@ -28,9 +28,11 @@ class ArtifactSpace:
     kind: str = "pca"
     lda_mean: np.ndarray | None = None
     lda_scal: np.ndarray | None = None
+    embedder: object = None     # ml.attribution.AttributionEmbedder when kind == "supcon"
 
     @classmethod
-    def fit(cls, X: np.ndarray, k: int = 32, seed: int = 0, kind: str = "pca", labels=None) -> "ArtifactSpace":
+    def fit(cls, X: np.ndarray, k: int = 32, seed: int = 0, kind: str = "pca", labels=None,
+            embedder=None) -> "ArtifactSpace":
         mu = np.nanmean(X, 0)
         mu = np.where(np.isfinite(mu), mu, 0)
         sd = np.nanstd(X, 0)
@@ -39,6 +41,12 @@ class ArtifactSpace:
         m = Z.mean(0)
         _, _, vt = np.linalg.svd(Z - m, full_matrices=False)
         sp = cls(mu, sd, m, vt[:k], kind)
+        if kind == "supcon":
+            # supervised forgery-attribution embedding (ml/attribution.py); k = embedding dimension
+            # pre-trained on the (larger) head-training data when given; else fitted on the reference itself
+            from ml.attribution import fit_embedder
+            sp.embedder = embedder if embedder is not None else fit_embedder(X, labels, seed=seed, dim=k)
+            return sp
         if kind == "lda":
             from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
             P = (Z - m) @ vt[:k].T
@@ -48,6 +56,8 @@ class ArtifactSpace:
         return sp
 
     def transform(self, X: np.ndarray) -> np.ndarray:
+        if self.kind == "supcon":
+            return self.embedder.embed(X)
         Z = np.nan_to_num((X - self.mu) / self.sd)
         P = (Z - self.pca_mean) @ self.pca_comp.T
         return P if self.kind == "pca" else (P - self.lda_mean) @ self.lda_scal
@@ -105,7 +115,7 @@ class NoveltyModel:
 
 
 def fit_novelty(X_raw: np.ndarray, labels: list[str], seed: int = 0, k: int = 32, cal_frac: float = 0.3,
-                use_sklearn: bool = True, kind: str = "pca") -> NoveltyModel:
+                use_sklearn: bool = True, kind: str = "pca", embedder=None) -> NoveltyModel:
     rng = np.random.default_rng(seed)
     labels = np.asarray(labels).astype(object)
     # classes with too few samples for a stable mean fall back to their family (replay_* -> replay)
@@ -113,7 +123,7 @@ def fit_novelty(X_raw: np.ndarray, labels: list[str], seed: int = 0, k: int = 32
     idx = rng.permutation(len(X_raw))
     n_cal = int(len(idx) * cal_frac)
     cal, fit = idx[:n_cal], idx[n_cal:]
-    space = ArtifactSpace.fit(X_raw[fit], k, seed, kind, labels[fit])
+    space = ArtifactSpace.fit(X_raw[fit], k, seed, kind, labels[fit], embedder=embedder)
     Z = space.transform(X_raw[fit])
     classes = sorted(set(labels[fit]))
     means = np.stack([Z[labels[fit] == c].mean(0) for c in classes])
@@ -184,14 +194,18 @@ def cluster_candidates(Z: np.ndarray, min_cluster_size: int = 8, eps: float | No
 
 # LDA (supervised) candidates were evaluated and REJECTED: on the small reference they overfit the known-class
 # means, so windows of new subjects fired H_A|Q 70% of the time on stationary data (docs/EXPERIMENTS.md, E6).
-CANDIDATES = [("pca", 8), ("pca", 32), ("pca", 128)]
+CANDIDATES = [("pca", 8), ("pca", 32), ("pca", 128), ("supcon", 64)]
+# "supcon" = forgery-attribution embedding (ml/attribution.py, E6b). Selected only if it wins the leave-one-
+# known-class-out AUROC on the reference, like every other candidate.
 SCORERS = ("mahalanobis", "knn", "iforest", "lof")
 
 
-def select_config(X_raw: np.ndarray, labels, seed: int = 0) -> dict:
+def select_config(X_raw: np.ndarray, labels, seed: int = 0, embedder_factory=None) -> dict:
     """Leave-one-KNOWN-class-out on the reference only: for every known class c, fit on the other classes and
     measure how well each (space, scorer) separates c from held-out samples of the remaining classes.
-    The best mean AUROC is chosen. No novel/test data is touched (no leakage)."""
+    The best mean AUROC is chosen. No novel/test data is touched (no leakage).
+    embedder_factory(excluded_class) -> AttributionEmbedder trained on head-training data WITHOUT that class, so the
+    supcon candidate is scored leave-one-class-out exactly like the others (no advantage from having seen c)."""
     from sklearn.metrics import roc_auc_score
     labels = np.asarray(labels).astype(object)
     labels = np.array([l if (labels == l).sum() >= 15 else l.split("_")[0] for l in labels], dtype=object)
@@ -205,7 +219,8 @@ def select_config(X_raw: np.ndarray, labels, seed: int = 0) -> dict:
             n_te = len(others) // 4
             te_known, tr_idx = others[:n_te], others[n_te:]
             try:
-                m = fit_novelty(X_raw[tr_idx], list(labels[tr_idx]), seed, k, kind=kind)
+                emb = embedder_factory(c) if (kind == "supcon" and embedder_factory is not None) else None
+                m = fit_novelty(X_raw[tr_idx], list(labels[tr_idx]), seed, k, kind=kind, embedder=emb)
             except (ValueError, np.linalg.LinAlgError) as e:      # record, never hide, failed candidates
                 res.setdefault(f"{kind}{k}/_failed", []).append(str(e)[:80])
                 continue
@@ -218,8 +233,8 @@ def select_config(X_raw: np.ndarray, labels, seed: int = 0) -> dict:
     summary = {key: {"mean_auroc": float(np.mean(v)), "per_class": v} for key, v in res.items() if key not in failed}
     best = max(summary, key=lambda key: summary[key]["mean_auroc"])
     kind_k, scorer = best.split("/")
-    kind = "lda" if kind_k.startswith("lda") else "pca"
-    return {"kind": kind, "k": int(kind_k[3:]), "scorer": scorer, "loco": summary, "classes": classes, "failed": failed}
+    kind = next(kd for kd in ("supcon", "lda", "pca") if kind_k.startswith(kd))
+    return {"kind": kind, "k": int(kind_k[len(kind):]), "scorer": scorer, "loco": summary, "classes": classes, "failed": failed}
 
 # ---------------------------------------------------------------- forgery-specific artifact vector (E6 pilot)
 M2_SCALARS = ("m2_clip_temporal_mean_step", "m2_clip_temporal_max_step", "m2_clip_consistency",

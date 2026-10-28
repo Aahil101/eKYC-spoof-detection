@@ -1,17 +1,28 @@
-# codmav: Video-KYC fraud detection with drift and novel-attack monitoring
+﻿# codmav: Video-KYC fraud detection with drift and novel-attack monitoring
 
-Research prototype. **Status: milestone 2 of 6** (skeleton, data logging, Kaggle training infrastructure). **No trained models yet:** every module is a labelled placeholder, and the system returns `decision = UNAVAILABLE` with no scores. Nothing is hardcoded or faked.
+Research prototype. **All six planned milestones are complete.** Every score comes from models trained on public datasets on Kaggle, and every result in the docs comes from a reproducible run. Nothing is hardcoded. Negative results are reported as such.
 
-- Plan and design: `docs/ARCHITECTURE.md`, `docs/EXPERIMENT_PLAN.md`, `docs/RESEARCH_NOTES.md`
-- Training on Kaggle: `docs/KAGGLE.md` · Privacy: `docs/PRIVACY.md`
+- Results: `docs/EXPERIMENTS.md` (all tables, with reproduce commands) · paper draft: `docs/PAPER_OUTLINE.md`
+- Design: `docs/ARCHITECTURE.md`, `docs/MODULES.md`, `docs/FUSION.md`, `docs/MONITORING.md` · citations: `docs/RESEARCH_NOTES.md`
+- Training on Kaggle: `docs/KAGGLE.md` · Privacy: `docs/PRIVACY.md` · handoff for coding agents: `AGENTS.md`
 
-## What works now
+## What it does
 
-- KYC flow: consent → ID upload (JPEG/PNG/WebP/PDF) → in-browser selfie recording with server-issued random challenge prompts → asynchronous processing → result page with per-module status, the capture-quality vector, and "delete my data".
-- Backend: FastAPI, encrypted media store (AES-256-GCM, key rotation), SQLite by default or Postgres via a profile, session/module/quality/embedding/label/drift/alert tables, retention purge, versioned model bundles.
-- Quality vector: resolution, FPS and jitter, bitrate, bits per pixel, Laplacian variance, Tenengrad, brightness, contrast, clipping, noise σ, and ID JPEG blockiness. Face size and head pose are NaN until milestone 3.
-- Training infrastructure: config-driven jobs (smoke on CPU / full on Kaggle), crash-safe checkpoints with automatic resume across Kaggle sessions, a notebook generator, a source packager for offline notebooks, and a weight importer that writes into versioned bundles.
+**Dashboard 1 (KYC).** Consent → ID upload → selfie video with random challenges → five modules → calibrated fusion → ACCEPT / HUMAN_REVIEW / REJECT, with per-module scores, confidence and the capture-quality vector.
 
+| module | method | headline test result |
+|---|---|---|
+| M1 document forgery | ELA/DCT/noise forensics + calibrated head | AUC 1.00 on seen designs, **0.55 on unseen designs** |
+| M2 deepfake | frozen CLIP ViT-B/16 + spectrum + temporal cues, linear probe | FF++ 0.871, Celeb-DF (cross-dataset) 0.769 |
+| M3 replay/PAD | colour LBP/moiré + GBM (CelebA-Spoof + MSU-MFSD video) | MSU-MFSD 0.914, CelebA-Spoof 0.979 |
+| M4 liveness | rPPG (POS/CHROM) + blink + challenge-response | MSU-MFSD 0.691 (weak) |
+| M5 face match | ArcFace (InsightFace, non-commercial) + landmark ratios | Celeb-DF identity pairs 0.995 |
+| Fusion | GBM stacking + quality (F3); thresholds and veto chosen from data | AUC 0.963 ± 0.005 (5 seeds) |
+
+**Dashboard 2 (MLOps monitoring).** It runs per-feature and multivariate drift tests against a **subject-level empirical null** (iid tests raise 100% false alarms; this null raises 10%), plus conformal novelty scoring. A quality-conditional rule then labels each window NONE / QUALITY_DRIFT / CONCEPT_DRIFT / OUTPUT_DRIFT / NOVEL_ATTACK / MIXED and emits actionable recommendations.
+- **Results:** 0% false novelty in all scenarios; an OOD-only monitor reaches 95% false novelty under domain drift. All 5 controlled corruptions are detected and attributed to the right quality feature.
+- **Retraining:** acting on the recommendation recovers 17–29% of the lost M2 AUC (E8).
+- **Limitation:** truly new deepfake methods are **not** reliably detected (E6/E6b).
 ## Quick start (laptop, CPU)
 
 Python 3.11 or 3.12, Node 20+.
@@ -25,7 +36,9 @@ uvicorn backend.app.main:get_app --factory --port 8000
 cd frontend && npm install && npm run dev                # http://127.0.0.1:5173
 ```
 
-Tests: `python -m pytest` (43 tests). Training plumbing smoke run: `python -m training.run --config training/configs/selftest.yaml --mode smoke`.
+ML stack and weights: see `AGENTS.md` "How to run" (torch CPU, `requirements/ml.txt`, `python -m ml.common.weights fetch`). Trained model bundles are not in git; rebuild `kyc-v0.4` from the Kaggle outputs (`AGENTS.md`). Without a bundle, the modules report `UNAVAILABLE`.
+
+Tests: `python -m pytest` (92 tests). Training plumbing smoke run: `python -m training.run --config training/configs/selftest.yaml --mode smoke`.
 
 ## Docker
 
@@ -44,14 +57,14 @@ Ports are bound to 127.0.0.1 only.
 
 ```
 backend/      FastAPI app (config, crypto, media store, DB, pipeline, auth, API)
-ml/           module interface, media decoding, quality vector, placeholders, model registry
+ml/           modules M1-M5, features, heads, fusion, attribution embedding, model registry
 training/     job runner, checkpoints, configs, dataset registry, Kaggle notebook generator, weight import
-monitoring/   drift + novelty (milestone 5)
-experiments/  reproducible experiments (milestone 6)
+monitoring/   drift, novelty, drift-vs-novelty disambiguation, recommendations
+experiments/  paper tables and experiments E1-E10 (results in docs/EXPERIMENTS.md)
 frontend/     React + Vite + Tailwind
 config/       pipeline.yaml, policy.yaml (thresholds null until calibrated)
 docs/         research notes, architecture, experiment plan, Kaggle, privacy
 tests/        pytest suite (synthetic media only)
 ```
 
-Screenshots will be added once milestone 4 produces a real result page.
+Figures: `docs/figures/e2_reliability.png` (calibration).

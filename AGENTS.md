@@ -22,7 +22,7 @@ A research-grade Video-KYC fraud detection system with two dashboards (KYC decis
 | 3 | Real modules M1–M5 + Kaggle feature extraction + head training | **done** (heads v3; docs/MODULES.md) |
 | 4 | Fusion F0–F6, data-driven thresholds/veto, Dashboard 1 | **done** (docs/FUSION.md) |
 | 5 | Drift + novelty + drift-vs-novelty rule + Dashboard 2 | **done**; drift works, novel-attack detection does NOT (docs/MONITORING.md) |
-| 6 | Experiments + paper outline | **done** (docs/EXPERIMENTS.md, docs/PAPER_OUTLINE.md); E2/E8/E10 open |
+| 6 | Experiments E1–E10 + paper outline | **done** (docs/EXPERIMENTS.md, docs/PAPER_OUTLINE.md) |
 
 All six planned milestones are complete. Remaining work is research follow-up (see "Open items").
 
@@ -41,7 +41,7 @@ Then set `MODEL_BUNDLE=kyc-v0.4`. The heads come from `codmav-train-heads` v3 (f
 1. `codmav-fetch-sidtd-templates` → `codmav-feats-{sidtd,msu,celebaspoof}` + `codmav-feats-{ffpp,celebdf}` (GPU)
 2. `codmav-train-heads` → `codmav-train-fusion` → `codmav-build-reference`
 3. `codmav-feats-ffpp-corrupt` (GPU, E5)
-4. Local analysis on downloaded feature shards (≈200 MB, temp only): `experiments/paper_tables.py`, `experiments/e5_corruptions.py`.
+4. Local analysis on downloaded feature shards (≈200 MB, temp only): `experiments/paper_tables.py` (E1/E3), `e2_e10.py`, `e5_corruptions.py`, `e6_attribution.py`, `e8_closed_loop.py`, `e9_latency.py`. The commands are in `docs/EXPERIMENTS.md`.
 
 ### Key findings to keep in mind
 - **M1** fails on unseen document designs (leave-one-type-out AUC 0.55). The SIDTD AUC of 1.0 is only for seen designs.
@@ -49,16 +49,18 @@ Then set `MODEL_BUNDLE=kyc-v0.4`. The heads come from `codmav-train-heads` v3 (f
 - **M2** loses 0.13–0.24 AUC under every capture corruption (E5a).
 - **Fusion:** F3 > F1 is significant; quality gating (F4) is not better on clean data.
 - **Monitoring** needs a subject-level empirical null; iid tests give 100% false alarms.
-- **Novelty** of a held-out FF++ method is not detectable in the current representations (E6).
+- **Novelty** of a held-out FF++ method is barely detectable. The supervised-contrastive attribution embedding (`ml/attribution.py`, novelty space `supcon`) raises sample AUROC 0.58 → 0.64 and removes most of the domain confound, but window-level detection is still 0% (E6b).
+- **Closed loop:** augmenting M2 with the recommended corruption recovers 17–29% of the lost AUC (E8a). Under corruption, F1 is more robust than F3/F4 (E8b).
+- **E10:** no demographic labels exist. Capture subgroups show large gaps (laptop genuine false-reject 0.45 vs Android 0.15).
+- `build_reference` params: `attribution_embedding` (default true) adds the `supcon64` candidate to the leave-one-class-out selection; `novelty_space: supcon64/knn` forces a space (ablation).
 
-### Open items (priority)
-1. A forgery-attribution embedding (supervised-contrastive over known methods), then re-run E6/E7.
-2. E8 closed loop: augment/fine-tune M2 with the recommended corruption and measure recovery; test F4/F6 under corruption.
-3. E10 bias audit (CelebA-Spoof attributes).
-4. More unseen generators: DFDC competition data, SadTalker/SimSwap from the DF40 slice.
-5. E2 reliability diagrams; laptop vs Docker latency table.
-6. Possible plug-ins: TruFor for M1, SBI-EfficientNet for M2 (config `m2_sbi_effnet.yaml`, not implemented).
-
+### Open items (priority, research follow-up)
+1. Novelty: fine-tune a forgery backbone end-to-end with SupCon (E6b uses frozen 541-d features), and evaluate on unseen generators (DF40 slice: SadTalker/SimSwap; DFDC).
+2. Demographic audit with a labelled dataset (licence permitting).
+3. A real consented KYC pilot, to remove the independence assumption of composite sessions.
+4. Downscale/JPEG windows are still labelled MIXED in 30–40% of cases (E5b). Improve the quality-reweighting model.
+5. Possible plug-ins: TruFor for M1, SBI-EfficientNet for M2 (config `m2_sbi_effnet.yaml`, not implemented).
+6. Latency on GPU / Docker (E9 is laptop CPU only).
 ### History notes
 - Heads must be trained with **scikit-learn 1.9.1** (pinned), because pickles must match the serving version.
 - **Re-package `codmav-src` and version the dataset before pushing any notebook that uses new code or configs.**
@@ -71,7 +73,7 @@ pip install -r requirements/dev.txt
 pip install torch==2.14.1 torchvision==0.29.1 --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements/ml.txt
 python -m ml.common.weights fetch          # MediaPipe, ArcFace (non-commercial), Vosk -> models/store/
-python -m pytest                           # 90 tests
+python -m pytest                           # 92 tests
 uvicorn backend.app.main:get_app --factory --port 8000 ; cd frontend && npm install && npm run dev
 docker compose up --build                  # http://127.0.0.1:8080 (image ~3 GB with the ML stack)
 ```

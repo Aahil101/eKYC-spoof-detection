@@ -66,6 +66,33 @@ def dedupe_videos(sess: list[dict]) -> list[dict]:
     return out
 
 
+def train_embedder_factory(seed: int, exclude: set[str]):
+    """Forgery-attribution embedder (ml/attribution.py) trained on the HEAD-TRAINING partitions (FF++ train,
+    MSU-MFSD train): disjoint from the reference (fusion_train) and the stream (fusion_test). Classes in
+    `exclude` (the novel hold-out) are never seen. Returns f(extra_excluded_class) with caching."""
+    from ml.attribution import fit_embedder
+    from monitoring.novelty import artifact_vector
+    from training.feature_jobs import load_records
+    recs = [r for r in load_records("ffpp_c23") + load_records("msu_mfsd")
+            if r["split"] == "train" and r.get("face_frames", 0) > 0]
+    lab = np.array(["bona_fide" if r["label"] == 1 else
+                    (f"replay_{r['attack_type']}" if r["source"] == "msu" else f"deepfake_{r['attack_type']}") for r in recs])
+    lab = np.array([l if (lab == l).sum() >= 15 else l.split("_")[0] for l in lab])
+    X = np.stack([artifact_vector(r["m2_vec"], r["m2"]) for r in recs])
+    cache: dict = {}
+
+    def f(extra=None):
+        key = extra or ""
+        if key not in cache:
+            keep = ~np.isin(lab, list(exclude | ({extra} if extra else set())))
+            # a family label (e.g. "replay") excludes all its members
+            if extra and "_" not in extra:
+                keep &= ~np.char.startswith(lab.astype(str), extra + "_")
+            cache[key] = fit_embedder(X[keep], lab[keep], seed=seed)
+        return cache[key]
+    return f
+
+
 def take(a: dict, idx: np.ndarray) -> dict:
     return {k: v[idx] for k, v in a.items()}
 
@@ -86,11 +113,19 @@ def build_reference(cfg: dict, ctx) -> dict:
     R, T = arrays(tr, fusion), arrays(te, fusion)
     ctx.log("reference", n=len(tr), stream_pool=len(te))
     from monitoring.novelty import select_config
-    sel = select_config(R["A"], list(R["video_class"]), seed)
+    use_emb = bool(p.get("attribution_embedding", True))
+    emb_f = train_embedder_factory(seed, hold) if use_emb else None
+    sel = select_config(R["A"], list(R["video_class"]), seed, embedder_factory=emb_f)
+    forced = p.get("novelty_space")          # ablation: e.g. "supcon64/knn" overrides the LOCO choice
+    if forced:
+        ks, sc_ = forced.split("/")
+        kd = next(x for x in ("supcon", "lda", "pca") if ks.startswith(x))
+        sel = sel | {"kind": kd, "k": int(ks[len(kd):]), "scorer": sc_, "forced": forced}
     ctx.log("novelty_selection", best=f"{sel['kind']}{sel['k']}/{sel['scorer']}",
             loco={k: round(v["mean_auroc"], 3) for k, v in sel["loco"].items()})
     p.setdefault("monitor", {})["scorer"] = sel["scorer"]
-    nov = fit_novelty(R["A"], list(R["video_class"]), seed, k=sel["k"], kind=sel["kind"])
+    nov = fit_novelty(R["A"], list(R["video_class"]), seed, k=sel["k"], kind=sel["kind"],
+                      embedder=emb_f() if (emb_f and sel["kind"] == "supcon") else None)
     sens = sensitivity_table(R["Q"], list(QUALITY_KEYS), R["P"], R["y"])
     qn = list(QUALITY_KEYS)
 
@@ -206,7 +241,8 @@ def build_reference(cfg: dict, ctx) -> dict:
     ctx.save_artifact("monitor_examples.json", json.dumps(examples, indent=2, default=float).encode())
     # served reference: ALL known classes (no hold-out), same exclusions
     Rfull = arrays(tr_all, fusion)
-    nov_full = fit_novelty(Rfull["A"], list(Rfull["video_class"]), seed, k=sel["k"], kind=sel["kind"])
+    emb_full = train_embedder_factory(seed, set())() if (use_emb and sel["kind"] == "supcon") else None
+    nov_full = fit_novelty(Rfull["A"], list(Rfull["video_class"]), seed, k=sel["k"], kind=sel["kind"], embedder=emb_full)
     null_full = build_null(Rfull, [take(T, stratified(W, burn=True)) for _ in range(B)], nov_full, qn, p.get("monitor", {}), seed)
     ctx.save_artifact("reference_served.pkl", pickle.dumps({"quality_names": qn, "reference": Rfull, "novelty": nov_full,
                                                             "null": null_full, "sensitivity": sensitivity_table(Rfull["Q"], qn, Rfull["P"], Rfull["y"]),

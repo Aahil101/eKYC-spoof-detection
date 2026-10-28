@@ -51,3 +51,15 @@ Simulated streams via `POST /api/monitor/simulate` (held-out features, no media)
 - stationary → **NONE**
 - domain_drift → **QUALITY_DRIFT** (medium alert). Recommendation: *"Drift detected in blur_laplacian_var (PSI 0.31 [crit 0.105], KS q=3.9e-02, shift −0.48 SD …). M5 AUC on reference sessions with low blur_laplacian_var is 0.966 (−0.011 vs overall; observational) … augment training with Gaussian/motion blur …"*
 - unseen_generator → QUALITY_DRIFT (the novelty is missed, consistent with the pilot)
+
+
+## Milestone 6 updates (final rule and representation; full tables in docs/EXPERIMENTS.md)
+- **Rule hardening from E5:**
+  - A novelty alarm now additionally requires that the outliers are a **minority** of the window (`max_outlier_frac` 0.5).
+  - Their quality must **not** differ from the inliers' (`mmd_test`, `alpha_explain` 0.01). Otherwise the alarm is relabelled as drift.
+  - Per-feature drift needs a KS p-value calibrated on the subject-level null; beyond the null's support, the Kolmogorov tail is inflated by the null's design effect. It also needs PSI above the null's 95th percentile.
+  - With these changes, all 5 corruptions are detected with 0% control alarms.
+- **Attribution embedding (`ml/attribution.py`, `ArtifactSpace(kind="supcon")`):**
+  - It is trained on head-training partitions only.
+  - It is a candidate in the leave-one-class-out selection; the selection still picks pca128/LOF.
+  - Forced (`novelty_space: supcon64/knn`), it lowers the Celeb-DF genuine control from 0.78 to 0.54 and the OOD-only baseline's false novelty under domain drift from 0.95 to 0.35. Novel-attack windows are still not detected.
