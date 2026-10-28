@@ -1,4 +1,4 @@
-# Paper outline (draft, milestone 6)
+﻿# Paper outline (draft, milestone 6)
 
 Working title: **"Telling capture drift from new attacks: honest monitoring of a multi-module video-KYC system"**
 
@@ -36,7 +36,7 @@ Remote video-KYC combines document forensics, deepfake detection, presentation-a
 | E2 | Calibration | partial | ECE per module in E1; temperature scaling made M2's test ECE slightly worse (0.129 → 0.150): calibration shift between FF++ val and test | heads report |
 | E3 | Fusion ablation (5 seeds) | done | F3 0.963±0.005 > F2 0.956 > F1 0.931 > F4 0.917 > F6 0.878 > F0 0.868 > F5 0.725. F3−F1 +0.036 [+0.026, +0.047]; **F4−F1 −0.005 [−0.020, +0.011] (n.s.)**; F6−F5 +0.180 [+0.154, +0.208] | `e1_e3.md` |
 | E4 | Thresholds and veto | done | APCER target 1% (worst type) → test 5.1% (FaceShifter); genuine 55.8% accept / 42.2% review / 2.0% reject; veto not certifiable with 321 genuine samples | `docs/FUSION.md` |
-| E5 | Corruption sensitivity and drift detection | running | see `experiments/results/e5/e5.md` once the Kaggle run finishes | `experiments/e5_corruptions.py` |
+| E5 | Corruption sensitivity and drift detection | done | M2 loses 0.13–0.24 AUC under blur/downscale/JPEG/low-light/noise; M3/M4 ≤0.04. Drift detected in 100% of windows for all 5 corruptions, 0% alarms on the same videos uncorrupted, corrupted feature in top-3 attribution 100%; false novelty 30–40% for downscale/JPEG | `docs/EXPERIMENTS.md` |
 | E6 | Novel-attack detection (leave-one-method-out) | done (negative) | Held-out FaceShifter AUROC 0.39–0.57 in every space tried (CLIP+LBP, forgery vector, PCA/LDA); Celeb-DF fakes 0.70–0.92, **but Celeb-DF genuine (control) 0.76–0.86**, so this is domain, not forgery novelty | `docs/MONITORING.md`, build_reference report |
 | E7 | Drift vs novelty (6 scenarios × 20 windows) | done | Proposed rule: macro accuracy 0.45, **false-novelty rate 0.00 in every scenario**. OOD-rate-only baseline: 0.40 with **95% false novelty under domain drift**. Rule without quality conditioning: 0.475 | build_reference report (`e7.py`) |
 | E7b | iid vs subject-level null | done | stationary windows flagged as drift: 100% (iid) → 10% (subject-level null) | `docs/MONITORING.md` |
@@ -54,7 +54,7 @@ Remote video-KYC combines document forensics, deepfake detection, presentation-a
    - certified veto thresholds;
    - all configs, Kaggle notebooks and hashes released.
    *Experiments: E1, E1b, E4.*
-5. **C5, interventional recommendations (pending E5):** a module × corruption sensitivity matrix that turns drift alerts into concrete retraining actions.
+5. **C5, interventional recommendations (supported):** controlled corruptions show which module degrades under which capture condition. The frozen-CLIP deepfake detector loses 0.13–0.24 AUC under every common degradation, while texture PAD and liveness stay within 0.04. The monitor detects every corruption, attributes it to the right quality feature (top-3: 100%), and the recommender targets M2. *Experiments: E5a/E5b.* Not yet shown: that following the recommendation recovers performance (E8 closed loop).
 
 ## 6. Limitations (all go in the paper)
 - Composite sessions make fraud signals independent across modules by construction.
@@ -79,6 +79,6 @@ Remote video-KYC combines document forensics, deepfake detection, presentation-a
 
 ## 9. What would most strengthen the paper (next work)
 1. A **forgery-attribution embedding** (supervised-contrastive over known methods) so that a held-out method becomes OOD, then re-run E6/E7.
-2. Complete **E5** and test whether quality gating (F4/F6) helps under real corruptions.
+2. **E8 closed loop:** fine-tune or augment M2 on the recommended corruption and measure recovery. Also test whether quality gating (F4/F6) helps on corrupted composite sessions.
 3. **More unseen generators:** SadTalker/SimSwap from the DF40 slice, plus DFDC.
 4. **E10 bias audit** on CelebA-Spoof attributes.

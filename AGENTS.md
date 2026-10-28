@@ -1,4 +1,4 @@
-# AGENTS.md: handoff guide for coding agents
+﻿# AGENTS.md: handoff guide for coding agents
 
 Read this first. It says where the project stands and how to continue without redoing work.
 
@@ -19,33 +19,49 @@ A research-grade Video-KYC fraud detection system with two dashboards (KYC decis
 |---|---|---|
 | 1 | Research + plan docs | done |
 | 2 | Skeleton, encrypted session logging, Kaggle infra | done (Docker verified, Kaggle round trip verified) |
-| 3 | Real modules M1–M5 + Kaggle feature extraction + head training | **in progress** (see below) |
-| 4 | Fusion F0–F6, calibrated thresholds (E4), veto, Dashboard 1 polish | not started |
-| 5 | Drift + novelty + drift-vs-novelty rule + Dashboard 2 | **done (implementation)**; novelty detection NOT effective in the current artifact space, see docs/MONITORING.md |
-| 6 | Experiments E1–E10 + paper outline | not started |
+| 3 | Real modules M1–M5 + Kaggle feature extraction + head training | **done** (heads v3; docs/MODULES.md) |
+| 4 | Fusion F0–F6, data-driven thresholds/veto, Dashboard 1 | **done** (docs/FUSION.md) |
+| 5 | Drift + novelty + drift-vs-novelty rule + Dashboard 2 | **done**; drift works, novel-attack detection does NOT (docs/MONITORING.md) |
+| 6 | Experiments + paper outline | **done** (docs/EXPERIMENTS.md, docs/PAPER_OUTLINE.md); E2/E8/E10 open |
 
-### Milestone 3 status (as of commit time)
-- Done: face pipeline (`ml/common/face.py`); extractors (`ml/features/`); heads and calibration (`ml/heads.py`); serving modules (`ml/modules.py`, wired into `backend/app/pipeline.py`); UI module views; Kaggle jobs (`training/feature_jobs.py`); configs `training/configs/extract_*.yaml`, `train_heads.yaml`; 62 tests passing.
-- Kaggle extraction notebooks (`kaggle.com/code/aahil1011/codmav-feats-<name>`):
-  - `sidtd` COMPLETE (2,222 items, 0 errors), `msu` COMPLETE (280 items, 2 undecodable), `celebdf` COMPLETE (1,830 items, 1 error)
-  - `ffpp` COMPLETE (6,000 videos, 0 errors, 7.6 h). `celebaspoof` COMPLETE (v2 after fixing a lister that stalled >12 h on rglob over 1.1M files; 25,500 images, 30 min).
-  - Heads M1/M2/M4/M5 trained (`codmav-train-heads-a` v3) and imported as bundle `kyc-v0.3` (local only, `models/bundles` is git-ignored; rebuild with the import_heads command below). Results are in docs/MODULES.md. **M1's AUC of 1.0 is a compression shortcut; fix it in E1.**
-  - All 5 heads trained in `codmav-train-heads` v1 and imported as `kyc-v0.3` (0.3.0+84ab76b466).
-  - **Open issues before milestone 4:** (1) M3 image?video gap (MSU cross AUC 0.43; false-rejects genuine video), so retrain with MSU train subjects. (2) M1 SIDTD compression shortcut. Both are described in docs/MODULES.md.
-  - Heads must be trained with **scikit-learn 1.9.1** (pinned), because pickles must match the serving version.
-  - **Re-package codmav-src before pushing any notebook that uses a new config.**
-- **Next steps:**
-  1. When all five `codmav-feats-*` are COMPLETE:
-     ```
-     python -m training.make_notebook --config training/configs/train_heads.yaml --owner aahil1011
-     kaggle kernels push -p <ABS>/kaggle/build/train_heads
-     ```
-  2. Download `runs/train_heads/artifacts/*` and import every head into one bundle:
-     ```
-     kaggle kernels output aahil1011/codmav-train-heads -p <dl> --file-pattern "runs/.*/(artifacts/.*|run_manifest.json)"
-     python -m training.import_heads --run-dir <dl>/runs/train_heads --bundle kyc-v0.3 --semver 0.3.0
-     ```
-  3. Set `MODEL_BUNDLE=kyc-v0.3`, run a live session, and record the metrics from `heads_report.json` in `docs/MODULES.md`.
+All six planned milestones are complete. Remaining work is research follow-up (see "Open items").
+
+### Served bundle `kyc-v0.4` (models/bundles is git-ignored: rebuild from Kaggle outputs)
+```
+kaggle kernels output aahil1011/codmav-train-heads     -p <dl1> --file-pattern "runs/train_heads/(artifacts/.*|run_manifest.json)"
+kaggle kernels output aahil1011/codmav-train-fusion    -p <dl2> --file-pattern "runs/train_fusion/(artifacts/.*|run_manifest.json)"
+kaggle kernels output aahil1011/codmav-build-reference -p <dl3> --file-pattern "runs/build_reference/(artifacts/.*|run_manifest.json)"
+python -m training.import_heads   --run-dir <dl1>/runs/train_heads --bundle kyc-v0.4 --semver 0.4.0
+python -m training.import_weights --run-dir <dl2>/runs/train_fusion --module FUSION --bundle kyc-v0.4 --semver 0.4.0 --artifacts fusion.pkl
+python -m training.import_weights --run-dir <dl3>/runs/build_reference --module MONITOR --bundle kyc-v0.4 --semver 0.4.0 --artifacts reference_served.pkl --allow-incomplete
+```
+Then set `MODEL_BUNDLE=kyc-v0.4`. The heads come from `codmav-train-heads` v3 (fv2: M3 with video data, M1 normalised documents), fusion from `codmav-train-fusion` v4 (F3 stacking, out-of-fold thresholds, rule-of-three veto), and the monitor reference from `codmav-build-reference` v2 (subject-level empirical null, final drift-vs-novelty rule).
+
+### Pipelines (in order; all on Kaggle, CPU unless noted)
+1. `codmav-fetch-sidtd-templates` → `codmav-feats-{sidtd,msu,celebaspoof}` + `codmav-feats-{ffpp,celebdf}` (GPU)
+2. `codmav-train-heads` → `codmav-train-fusion` → `codmav-build-reference`
+3. `codmav-feats-ffpp-corrupt` (GPU, E5)
+4. Local analysis on downloaded feature shards (≈200 MB, temp only): `experiments/paper_tables.py`, `experiments/e5_corruptions.py`.
+
+### Key findings to keep in mind
+- **M1** fails on unseen document designs (leave-one-type-out AUC 0.55). The SIDTD AUC of 1.0 is only for seen designs.
+- **M3** needs video training data: image-only AUC on video was 0.43; with video data, 0.914.
+- **M2** loses 0.13–0.24 AUC under every capture corruption (E5a).
+- **Fusion:** F3 > F1 is significant; quality gating (F4) is not better on clean data.
+- **Monitoring** needs a subject-level empirical null; iid tests give 100% false alarms.
+- **Novelty** of a held-out FF++ method is not detectable in the current representations (E6).
+
+### Open items (priority)
+1. A forgery-attribution embedding (supervised-contrastive over known methods), then re-run E6/E7.
+2. E8 closed loop: augment/fine-tune M2 with the recommended corruption and measure recovery; test F4/F6 under corruption.
+3. E10 bias audit (CelebA-Spoof attributes).
+4. More unseen generators: DFDC competition data, SadTalker/SimSwap from the DF40 slice.
+5. E2 reliability diagrams; laptop vs Docker latency table.
+6. Possible plug-ins: TruFor for M1, SBI-EfficientNet for M2 (config `m2_sbi_effnet.yaml`, not implemented).
+
+### History notes
+- Heads must be trained with **scikit-learn 1.9.1** (pinned), because pickles must match the serving version.
+- **Re-package `codmav-src` and version the dataset before pushing any notebook that uses new code or configs.**
 - Local check: a laptop run of `train_heads` on the M4+M5 shards gave MSU-MFSD test AUC 0.69 (M4, weak, as expected) and Celeb-DF identity-verification test AUC 0.995 (M5). Treat these as preliminary until the Kaggle run.
 
 ## How to run
@@ -55,7 +71,7 @@ pip install -r requirements/dev.txt
 pip install torch==2.14.1 torchvision==0.29.1 --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements/ml.txt
 python -m ml.common.weights fetch          # MediaPipe, ArcFace (non-commercial), Vosk -> models/store/
-python -m pytest                           # 62 tests
+python -m pytest                           # 90 tests
 uvicorn backend.app.main:get_app --factory --port 8000 ; cd frontend && npm install && npm run dev
 docker compose up --build                  # http://127.0.0.1:8080 (image ~3 GB with the ML stack)
 ```
