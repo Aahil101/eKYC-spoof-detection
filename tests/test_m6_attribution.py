@@ -39,3 +39,35 @@ def test_supcon_novelty_space_with_pretrained_embedder_and_pickle():
     assert s["mahalanobis"].shape == (10,)
     nov2 = pickle.loads(pickle.dumps(nov))           # served reference must pickle without torch objects
     assert np.allclose(nov2.scores(X[:10])["knn"], s["knn"])
+
+
+def test_detect_actions_from_synthetic_head_pose():
+    """Self-paced liveness: a synthetic landmark track that turns left/right, nods up/down and blinks."""
+    from ml.common import face as F
+    from ml.features.liveness import ACTIONS, detect_actions
+
+    def frame(t, dx=0.0, dy=0.0, eye_open=1.0):
+        L = np.zeros((478, 3))
+        L[list(F.LEFT_EYE_EAR), 0], L[list(F.RIGHT_EYE_EAR), 0] = 140, 60      # eye centres x
+        L[list(F.LEFT_EYE_EAR), 1] = L[list(F.RIGHT_EYE_EAR), 1] = 100
+        # eye opening: vertical spread of the EAR points (indices 1,2 above / 4,5 below)
+        for eye in (F.LEFT_EYE_EAR, F.RIGHT_EYE_EAR):
+            x0 = L[eye[0], 0]
+            L[eye[0], 0], L[eye[3], 0] = x0 - 15, x0 + 15
+            for j in (1, 2):
+                L[eye[j], 1] = 100 - 6 * eye_open
+            for j in (4, 5):
+                L[eye[j], 1] = 100 + 6 * eye_open
+        L[F.NOSE_TIP, :2] = (100 + dx * 80, 150 + dy * 100)
+        L[F.CHIN, :2] = (100, 200)
+        return F.FaceFrame(t_ms=t, landmarks=L, bbox=(40, 60, 160, 210))
+    seq = [(0, 0, 1)] * 30 + [(0.4, 0, 1)] * 5 + [(0, 0, 1)] * 10 + [(-0.4, 0, 1)] * 5 + [(0, 0, 1)] * 10 \
+        + [(0, -0.2, 1)] * 5 + [(0, 0, 1)] * 10 + [(0, 0.2, 1)] * 5 + [(0, 0, 1)] * 5 + [(0, 0, 0.05)] * 2 + [(0, 0, 1)] * 10
+    faces = [frame(i * 125.0, dx, dy, eo) for i, (dx, dy, eo) in enumerate(seq)]
+    out = detect_actions(faces, [f.t_ms for f in faces])
+    got = {a["action"]: a["done"] for a in out["actions"]}
+    assert set(got) == set(ACTIONS)
+    assert all(got.values()) and out["all_done"], out["actions"]
+    still = [frame(i * 125.0) for i in range(60)]
+    out2 = detect_actions(still, [f.t_ms for f in still])
+    assert not out2["all_done"] and not any(a["done"] for a in out2["actions"] if a["action"] != "blink")

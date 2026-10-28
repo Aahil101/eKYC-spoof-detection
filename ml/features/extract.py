@@ -86,7 +86,28 @@ def m2_features(clip_embs: np.ndarray, crops: list[np.ndarray], faces) -> tuple[
 # ------------------------------------------------------------------------------------------
 # Shared video analysis (API + Kaggle jobs). Embeddings are computed afterwards (GPU-batched in jobs).
 VIDEO_DEFAULTS = {"sample_frames": 16, "max_seconds": 12.0, "max_side": 720, "dense_side": 320,
-                  "dense_seconds": 8.0, "dense_fps": 15.0, "arc_frames": 4}
+                  "dense_seconds": 8.0, "dense_fps": 15.0, "arc_frames": 4,
+                  # serving-only options (defaults reproduce the training-time extraction exactly):
+                  "full_every_ms": 0.0,     # >0: keep a full-res frame only every N ms (long free recordings)
+                  "frontal_pool": 0,        # >0: sample this many frames, keep the sample_frames most frontal ones
+                  "actions": False,         # detect self-paced blink / head-turn actions over the whole video
+                  "actions_fps": 8.0}
+
+
+def _frontal_subset(frames, times, faces, k):
+    """The k most frontal frames (training data - FF++/Celeb-DF/MSU - is mostly frontal), in temporal order.
+    Frames without a face are used only if fewer than k frontal faces exist."""
+    from ml.features.liveness import head_pose_series
+    h, v = head_pose_series(faces)
+    ok = np.isfinite(h) & np.isfinite(v)
+    if ok.sum() == 0:
+        sel = np.linspace(0, len(frames) - 1, min(k, len(frames))).round().astype(int)
+    else:
+        h0, v0 = np.median(h[ok]), np.median(v[ok])
+        dev = np.where(ok, np.abs(h - h0) / 0.18 + np.abs(v - v0) / 0.08, np.inf)
+        sel = np.sort(np.argsort(dev, kind="stable")[:k])
+    sel = sorted(set(int(i) for i in sel))
+    return [frames[i] for i in sel], [times[i] for i in sel], [faces[i] for i in sel]
 
 
 def _subsample_dense(frames, times, seconds, fps):
@@ -107,8 +128,18 @@ def analyse_video(data: bytes, cfg: dict | None = None, challenge=None, audio_tr
     from ml.common.media import decode_video
     from ml.common.quality import compute_quality
     c = {**VIDEO_DEFAULTS, **(cfg or {})}
-    v = decode_video(data, c["sample_frames"], c["max_seconds"], c["max_side"], dense_max_side=c["dense_side"])
+    n_sample = int(c["frontal_pool"]) or c["sample_frames"]
+    v = decode_video(data, n_sample, c["max_seconds"], c["max_side"], dense_max_side=c["dense_side"],
+                     full_every_ms=float(c["full_every_ms"]))
     dframes, dtimes = _subsample_dense(v.dense_frames, v.dense_times_ms, c["dense_seconds"], c["dense_fps"])
+    actions = None
+    if c["actions"]:
+        aframes, atimes = _subsample_dense(v.dense_frames, v.dense_times_ms, c["max_seconds"], c["actions_fps"])
+        from ml.features.liveness import detect_actions
+        with FaceAnalyzer() as fa:
+            afaces, _ = fa.process_all(aframes, atimes)
+        actions = detect_actions(afaces, atimes)
+    v.dense_frames = None                         # free memory early (long recordings)
     if c.get("corruption"):                       # E5: controlled capture degradation before ALL features
         from ml.features.corruptions import corrupt_all
         kind, sev = c["corruption"]["kind"], int(c["corruption"]["severity"])
@@ -116,6 +147,8 @@ def analyse_video(data: bytes, cfg: dict | None = None, challenge=None, audio_tr
         dframes = corrupt_all(dframes, kind, sev, seed=2)
     with FaceAnalyzer() as fa:
         faces, n_faces = fa.process_all(v.frames, v.times_ms)
+    if c["frontal_pool"]:
+        v.frames, v.times_ms, faces = _frontal_subset(v.frames, v.times_ms, faces, c["sample_frames"])
     with FaceAnalyzer() as fa:
         dfaces, _ = fa.process_all(dframes, dtimes)
     crops, arc_crops, crop_idx = face_crops(v.frames, faces)
@@ -136,15 +169,19 @@ def analyse_video(data: bytes, cfg: dict | None = None, challenge=None, audio_tr
     return {"meta": v.meta, "quality": q, "n_faces_max": n_faces, "face_frames": int(sum(f.ok for f in faces)),
             "m2": s2, "m2_vec": v2, "m3": s3, "m3_vec": v3, "m4": s4, "m4_expl": x4, "m5_geo": g,
             "m5_ratios": med_ratios, "clip_crops": crops, "arc_crops": arc_sel,
+            "crop_times_ms": [float(v.times_ms[i]) for i in crop_idx], "actions": actions,
             "overlay": {"frame_index": lm_frame,
                         "landmarks": faces[lm_frame].landmarks[:, :2].round(1).tolist() if lm_frame is not None else None,
                         "frame_shape": list(v.frames[0].shape[:2])},
             "first_frame": v.frames[lm_frame] if lm_frame is not None else v.frames[0]}
 
 
-def finish_embeddings(res: dict, clip: "ClipEmbedder", arc) -> dict:
-    """Adds CLIP-based M2 features and ArcFace embeddings; drops crops."""
+def finish_embeddings(res: dict, clip: "ClipEmbedder", arc, keep_frame_embs: bool = False) -> dict:
+    """Adds CLIP-based M2 features and ArcFace embeddings; drops crops. keep_frame_embs (serving only) keeps
+    the per-frame CLIP embeddings for the frame-level deepfake timeline."""
     ce = clip.embed(res.pop("clip_crops"))
+    if keep_frame_embs:
+        res["clip_frame_embs"] = ce.astype(np.float32)
     s, vec = m2_clip(ce)
     res["m2"].update(s)
     res["m2_vec"].update(vec)

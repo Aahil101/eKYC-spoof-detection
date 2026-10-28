@@ -1,13 +1,20 @@
 # Preprocessing used by the API pipeline and by feature-extraction jobs.
 video:
-  sample_frames: 16          # evenly spaced frames for M2/M3/M5
+  sample_frames: 16          # frames given to M2/M3/M5 (the most frontal of frontal_pool candidates)
+  frontal_pool: 32           # candidates sampled evenly over the whole recording
+  full_every_ms: 100         # keep a full-res frame every 100 ms (memory bound for free recordings up to 30 s)
+  actions: true              # detect self-paced blink / head turns over the whole video
+  actions_fps: 8
   rppg_fps: 30               # dense strip target for M4 (milestone 3)
-  max_seconds: 12
+  max_seconds: 30
   max_side: 720              # frames are downscaled so the longer side <= this
 document:
   max_side: 2000
   pdf_dpi: 200
 challenge:
-  duration_ms: 7000
+  mode: free                 # free: user records at their own pace (no timed prompts); actions are detected afterwards
+                             # timed: server-issued random prompts (milestone 2 behaviour)
+  min_duration_ms: 5000
+  duration_ms: 30000         # free mode: maximum recording length; timed mode: script length (7000)
   steps: 3                   # number of random prompts per session
   digits_len: 3

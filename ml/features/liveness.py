@@ -286,3 +286,83 @@ def decode_audio(data: bytes, rate: int = 16000) -> bytes | None:
             return bytes(out)
     except Exception:
         return None
+
+
+# ------------------------------------------------------------------ self-paced (unprompted) liveness actions
+ACTIONS = ("blink", "turn_left", "turn_right", "look_up", "look_down")
+ACTION_LABELS = {"blink": "Blink", "turn_left": "Turn head left", "turn_right": "Turn head right",
+                 "look_up": "Look up", "look_down": "Look down"}
+ACTION_THRESHOLDS = {"yaw_shift": 0.25, "pitch_shift": 0.10, "min_frames": 2}   # ~25 deg turn, ~15 deg nod
+
+
+def head_pose_series(faces: list[F.FaceFrame]) -> tuple[np.ndarray, np.ndarray]:
+    """Geometric head pose from 2-D landmarks (no sign convention of the 3-D matrix needed):
+    h = horizontal offset of the nose tip from the eye midpoint / inter-ocular distance
+        (raw camera frames are not mirrored, so the subject turning to THEIR left moves the nose to image right: h up)
+    v = (nose_y - eye_y) / (chin_y - eye_y)   (looking up moves the nose towards the eye line: v down)."""
+    h, v = [], []
+    for f in faces:
+        if not f.ok:
+            h.append(np.nan)
+            v.append(np.nan)
+            continue
+        L = f.landmarks[:, :2]
+        le = L[list(F.LEFT_EYE_EAR)].mean(0)
+        re = L[list(F.RIGHT_EYE_EAR)].mean(0)
+        mid = 0.5 * (le + re)
+        iod = float(np.linalg.norm(le - re)) + 1e-6
+        nose, chin = L[F.NOSE_TIP], L[F.CHIN]
+        h.append(float((nose[0] - mid[0]) / iod))
+        v.append(float((nose[1] - mid[1]) / (chin[1] - mid[1] + 1e-6)))
+    return np.array(h), np.array(v)
+
+
+def detect_actions(faces: list[F.FaceFrame], times_ms: list[float]) -> dict:
+    """Which of blink / turn left / turn right / look up / look down the user performed, in any order and at
+    their own pace. Baseline = the user's neutral pose (median over the most frontal 30% of frames).
+    Thresholds are heuristic (not validated on a labelled liveness set) - measured values are returned so
+    the result is inspectable."""
+    t = np.asarray(times_ms, float)
+    h, v = head_pose_series(faces)
+    ok = np.isfinite(h) & np.isfinite(v)
+    out = {"n_frames": int(len(faces)), "face_frames": int(ok.sum()),
+           "duration_s": float((t[-1] - t[0]) / 1000) if len(t) > 1 else 0.0, "actions": [],
+           "thresholds": ACTION_THRESHOLDS, "method": "MediaPipe landmarks: eye-aspect-ratio blinks + "
+           "nose-offset head pose relative to the neutral pose"}
+    if ok.sum() < 8:
+        out["actions"] = [{"action": a, "label": ACTION_LABELS[a], "done": False, "note": "face not visible"}
+                          for a in ACTIONS]
+        out["all_done"] = False
+        out["series"] = {}
+        return out
+    neutral = np.argsort(np.abs(h[ok] - np.median(h[ok])))[: max(3, int(0.3 * ok.sum()))]
+    h0, v0 = float(np.median(h[ok][neutral])), float(np.median(v[ok][neutral]))
+    dh, dv = h - h0, v - v0
+    e = np.array([0.5 * (ear(f.landmarks, F.LEFT_EYE_EAR) + ear(f.landmarks, F.RIGHT_EYE_EAR)) if f.ok else np.nan
+                  for f in faces])
+    blinks = count_blinks(e, list(t), float(np.nanpercentile(e, 80))) if np.isfinite(e).sum() >= 10 else 0
+
+    def first_time(mask):
+        i = np.flatnonzero(mask & ok)
+        return round(float(t[i[0]] / 1000), 1) if len(i) else None
+    th_h, th_v, nmin = ACTION_THRESHOLDS["yaw_shift"], ACTION_THRESHOLDS["pitch_shift"], ACTION_THRESHOLDS["min_frames"]
+
+    def held(x, th):
+        """Pose held beyond the threshold for >= nmin frames (a single noisy landmark frame is not an action)."""
+        m = (np.nan_to_num(x, nan=-np.inf) >= th)
+        return bool(m.sum() >= nmin), round(float(np.nanmax(x)), 3)
+
+    L_, R_, U_, D_ = held(dh, th_h), held(-dh, th_h), held(-dv, th_v), held(dv, th_v)
+    res = {"blink": (blinks >= 1, {"count": int(blinks)}, None),
+           "turn_left": (L_[0], {"max_shift": L_[1]}, first_time(dh >= th_h)),
+           "turn_right": (R_[0], {"max_shift": R_[1]}, first_time(dh <= -th_h)),
+           "look_up": (U_[0], {"max_shift": U_[1]}, first_time(dv <= -th_v)),
+           "look_down": (D_[0], {"max_shift": D_[1]}, first_time(dv >= th_v))}
+    out["actions"] = [{"action": a, "label": ACTION_LABELS[a], "done": bool(res[a][0]), "at_s": res[a][2], **res[a][1]}
+                      for a in ACTIONS]
+    out["all_done"] = all(x["done"] for x in out["actions"])
+    step = max(1, len(t) // 120)                    # downsampled series for the UI timeline
+    r = lambda a: [None if not np.isfinite(x) else round(float(x), 3) for x in a[::step]]
+    out["series"] = {"t_s": [round(float(x / 1000), 2) for x in t[::step]], "horizontal": r(dh), "vertical": r(dv),
+                     "eye_openness": r(e)}
+    return out

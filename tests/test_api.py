@@ -45,7 +45,8 @@ def test_consent_required(client):
 
 def test_full_flow_logs_quality_and_placeholder_outputs(client, video_webm, document_png):
     sid, h, created = new_session(client)
-    assert len(created["challenge"]) == 3
+    # default config = free (self-paced) recording: no timed prompts, actions are detected afterwards
+    assert created["challenge"] == [] and created["duration_ms"] == 30000
     assert client.post(f"/api/sessions/{sid}/document", headers=h,
                        files={"file": ("id.png", document_png, "image/png")}).status_code == 204
     assert client.post(f"/api/sessions/{sid}/video", headers=h,

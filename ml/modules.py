@@ -70,7 +70,8 @@ def analyse_session(video_bytes: bytes, doc_img: np.ndarray | None, challenge, v
     res = E.analyse_video(video_bytes, vcfg, challenge, transcript, asr)
     crops = res.get("clip_crops") or []
     res["gradcam_crop"] = crops[len(crops) // 2] if crops else None
-    res = E.finish_embeddings(res, _clip(), _arc())
+    res["frame_thumbs"] = [_png_b64(cv2.resize(cr, (112, 112)), 112) for cr in crops]
+    res = E.finish_embeddings(res, _clip(), _arc(), keep_frame_embs=True)
     res["asr"] = {"method": asr, "audio": bool(audio)}
     # ID document: forensics + portrait (for M5)
     res["doc"] = None
@@ -172,8 +173,28 @@ class M2Deepfake(TrainedModule):
     def record(self, a):
         return {"m2": a["m2"], "m2_vec": a["m2_vec"]} if a.get("face_frames") else None
 
+    def frame_scores(self, a) -> list[dict]:
+        """Frame-level deepfake timeline: the head is applied with ONE frame's CLIP embedding in place of the
+        video mean (other features = this video's). Indicative only: the head was trained on 16-frame means,
+        so single-frame scores are noisier than the video score."""
+        E = a.get("clip_frame_embs")
+        if E is None or len(E) == 0:
+            return []
+        out = []
+        for i, e in enumerate(E):
+            rec = {"m2": a["m2"], "m2_vec": {**a["m2_vec"], "clip_mean": e}}
+            p, _, _ = self.art.predict(self.art.featurize(rec))
+            out.append({"t_s": round(a["crop_times_ms"][i] / 1000, 2) if i < len(a.get("crop_times_ms", [])) else None,
+                        "p_real": float(p[0]),
+                        "thumb_png": a["frame_thumbs"][i] if i < len(a.get("frame_thumbs", [])) else None})
+        return out
+
     def explain(self, a, s, feats):
         out = {}
+        try:
+            out["frames"] = self.frame_scores(a)
+        except Exception as e:  # explanation must never break scoring
+            out["frames_error"] = f"{type(e).__name__}: {e}"[:200]
         try:
             out["gradcam_png"] = _clip_gradcam(a, self.art)
             out["explain_method"] = "Grad-CAM on CLIP ViT-B/16 last block w.r.t. the linear-probe logit"
@@ -200,6 +221,9 @@ class M4Liveness(TrainedModule):
         e["asr"] = a.get("asr")
         steps = e.get("challenge_steps") or []
         e["challenge_failed"] = bool(steps) and not all(x["passed"] for x in steps)
+        if a.get("actions") is not None:
+            e["actions"] = a["actions"]
+            e["actions_incomplete"] = not a["actions"].get("all_done", False)
         return e
 
 

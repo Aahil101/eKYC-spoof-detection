@@ -118,7 +118,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status.HTTP_409_CONFLICT, "consent text has changed; reload and re-consent")
         ccfg = pipeline_cfg.get("challenge", {})
         duration = int(ccfg.get("duration_ms", 7000))
-        steps = generate_challenge(duration, int(ccfg.get("steps", 3)), int(ccfg.get("digits_len", 3)))
+        if ccfg.get("mode", "timed") == "free":
+            steps = []          # self-paced: blink/head-turn actions are detected from the video afterwards
+        else:
+            steps = generate_challenge(duration, int(ccfg.get("steps", 3)), int(ccfg.get("digits_len", 3)))
         token, token_hash = auth.new_token()
         meta = {k: str(v)[:200] for k, v in list(body.client_meta.items())[:20]}
         with sm() as db:
@@ -166,7 +169,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         _check_open(s)
         if not store.exists(s.id, "video"):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "selfie video not uploaded")
-        if not store.exists(s.id, "document"):
+        if not store.exists(s.id, "document") and not settings.demo_mode:
+            # demo mode may test the video checks alone (M1 document and M5 face match are then not applicable)
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "ID document not uploaded")
         with sm() as db:
             row = db.get(KYCSession, s.id)

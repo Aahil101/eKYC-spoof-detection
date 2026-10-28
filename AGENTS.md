@@ -61,6 +61,13 @@ Then set `MODEL_BUNDLE=kyc-v0.4`. The heads come from `codmav-train-heads` v3 (f
 4. Downscale/JPEG windows are still labelled MIXED in 30–40% of cases (E5b). Improve the quality-reweighting model.
 5. Possible plug-ins: TruFor for M1, SBI-EfficientNet for M2 (config `m2_sbi_effnet.yaml`, not implemented).
 6. Latency on GPU / Docker (E9 is laptop CPU only).
+### KYC UX (free recording, after milestone 6)
+- `config/pipeline.yaml` `challenge.mode: free`: no timed prompts. The user records 5–30 s at their own pace.
+- `ml/features/liveness.detect_actions` finds blink / turn left / turn right / look up / look down in 8 fps frames over the whole video, using geometric pose relative to the neutral pose. The thresholds are heuristic and **unvalidated**, so missing actions cap ACCEPT at HUMAN_REVIEW.
+- Model frames: the 16 most frontal of 32 candidates spread over the whole video (`frontal_pool`), so head turns don't push the models off their mostly frontal training distribution. The defaults in `VIDEO_DEFAULTS` keep Kaggle extraction identical to training.
+- The result page shows the video verdict (REAL PERSON / DEEPFAKE DETECTED / SPOOF SUSPECTED / UNCERTAIN), plus per-frame deepfake scores from the M2 head applied to single-frame CLIP embeddings. These are indicative only, because the head was trained on 16-frame means.
+- In demo mode the ID document can be skipped (M1/M5 not applicable), and a video file can be uploaded instead of recording.
+
 ### History notes
 - Heads must be trained with **scikit-learn 1.9.1** (pinned), because pickles must match the serving version.
 - **Re-package `codmav-src` and version the dataset before pushing any notebook that uses new code or configs.**

@@ -76,29 +76,32 @@ export default function Monitor() {
 
   return (
     <section className="space-y-6">
-      <div className="bg-white rounded-lg shadow p-4 flex flex-wrap gap-4 items-end">
+      <div className="card flex flex-wrap gap-4 items-end">
         <div>
-          <h1 className="text-xl font-semibold">Dashboard 2: drift and novel-attack monitoring</h1>
+          <h1 className="text-2xl font-semibold">Drift &amp; novel-attack monitor</h1>
           <p className="text-sm text-slate-600">Bundle {st?.bundle_version ?? "—"} · reference n={st?.reference_n ?? 0} ·
             logged sessions {st?.logged_sessions ?? 0} · open alerts {st?.open_alerts ?? 0}</p>
           {st && !st.reference_available && <p role="alert" className="text-red-700 text-sm">Active bundle has no monitoring reference.</p>}
+          <p className="text-sm text-slate-500 mt-1">How to test: (1) add a simulated stream of sessions with one of the scenario buttons
+            (stationary = normal traffic, domain drift = a new camera/capture domain, unseen generator = deepfakes from a generator the
+            models never saw), (2) click <em>Analyse latest window</em>. Real KYC sessions you run are logged here too.</p>
         </div>
         <label className="text-sm">Window (sessions)
-          <input type="number" min={50} max={1000} value={win} onChange={(e) => setWin(+e.target.value)} className="ml-2 border rounded px-2 w-24" /></label>
+          <input type="number" min={50} max={1000} value={win} onChange={(e) => setWin(+e.target.value)} className="ml-2 rounded-lg ring-1 ring-slate-300 px-2 py-1 w-24" /></label>
         <label className="text-sm">α
-          <input type="number" step={0.01} min={0.001} max={0.2} value={alpha} onChange={(e) => setAlpha(+e.target.value)} className="ml-2 border rounded px-2 w-20" /></label>
-        <button disabled={busy} onClick={() => act(`/api/monitor/run?window=${win}&alpha=${alpha}`)} className="px-3 py-1 rounded bg-blue-700 text-white disabled:opacity-50">Analyse latest window</button>
+          <input type="number" step={0.01} min={0.001} max={0.2} value={alpha} onChange={(e) => setAlpha(+e.target.value)} className="ml-2 rounded-lg ring-1 ring-slate-300 px-2 py-1 w-20" /></label>
+        <button disabled={busy} onClick={() => act(`/api/monitor/run?window=${win}&alpha=${alpha}`)} className="btn-primary">Analyse latest window</button>
         <span className="text-sm text-slate-600">Simulate (held-out features, no media):</span>
         {(["stationary", "domain_drift", "unseen_generator"] as const).map((s) => (
           <button key={s} disabled={busy} onClick={() => act(`/api/monitor/simulate?scenario=${s}&n=${win}&seed=${Date.now() % 1000}`)}
-            className="px-2 py-1 rounded border text-sm disabled:opacity-50">{s.replace("_", " ")}</button>))}
+            className="btn-ghost !px-3 !py-1.5 text-sm">+ {s.replace("_", " ")}</button>))}
         <label className="text-sm ml-auto">Admin key
           <input type="password" value={key} onChange={(e) => setKey(e.target.value)} onBlur={() => { sessionStorage.setItem("codmav-admin-key", key); load(); }}
-            className="ml-2 border rounded px-2 w-36" aria-label="Admin API key (not needed in demo mode)" /></label>
+            className="ml-2 rounded-lg ring-1 ring-slate-300 px-2 py-1 w-36" aria-label="Admin API key (not needed in demo mode)" /></label>
       </div>
       {err && <p role="alert" className="text-red-700">{err}</p>}
 
-      <div className="bg-white rounded-lg shadow p-4">
+      <div className="card">
         <h2 className="font-semibold mb-2">Drift timeline</h2>
         {reports.length === 0 ? <p className="text-sm text-slate-600">No reports yet. Simulate a stream and analyse a window.</p> : (
           <ol className="flex flex-wrap gap-2" aria-label="Window labels over time">
@@ -109,7 +112,7 @@ export default function Monitor() {
       </div>
 
       {reports.length > 0 && (
-        <div className="bg-white rounded-lg shadow p-4 overflow-x-auto">
+        <div className="card overflow-x-auto">
           <h2 className="font-semibold mb-2">Per-feature drift heatmap <span className="text-xs text-slate-500">(colour = −log10 BH q of KS vs subject-level null; outlined = drifted)</span></h2>
           <table className="text-xs border-collapse">
             <thead><tr><th scope="col" className="text-left pr-2">feature</th>{reports.map((r) => <th key={r.id} scope="col" className="px-1">#{r.id}</th>)}</tr></thead>
@@ -123,7 +126,7 @@ export default function Monitor() {
         </div>)}
 
       {detail && (
-        <div className="bg-white rounded-lg shadow p-4 space-y-3">
+        <div className="card space-y-3">
           <h2 className="font-semibold">Window detail {detail._id ? `#${detail._id}` : ""}: <span className={`px-2 rounded ${LABEL_STYLE[detail.label] ?? ""}`}>{detail.label}</span></h2>
           {mv?.tests && <p className="text-sm">Tests: {Object.entries(mv.tests).map(([k, v]) => `${k}=${typeof v === "number" ? (v as number).toFixed(3) : String(v)}`).join(" · ")}</p>}
           <div>
@@ -154,7 +157,7 @@ export default function Monitor() {
               <ul className="text-sm list-disc pl-5">{detail.recommendations.map((r: any, i: number) => <li key={i}>{r.message}</li>)}</ul></div>)}
         </div>)}
 
-      <div className="bg-white rounded-lg shadow p-4">
+      <div className="card">
         <h2 className="font-semibold mb-2">Alert feed</h2>
         {alerts.length === 0 ? <p className="text-sm text-slate-600">No alerts.</p> : (
           <ul className="space-y-2">{alerts.map((a) => (

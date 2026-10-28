@@ -95,6 +95,13 @@ def decide(outputs: list[ModuleOutput], policy: dict, fusion: dict | None = None
     Pd = {m: (by[m].score if m in by else None) for m in MODULES}
     Cd = {m: (by[m].confidence if m in by else None) for m in MODULES}
     decision, veto, reason = pol.decide(float(p[0]), Pd, Cd, challenge_failed)
+    # self-paced liveness actions (free recording mode): detection thresholds are heuristic and unvalidated,
+    # so missing actions cap the outcome at HUMAN_REVIEW instead of forcing a REJECT
+    acts = (m4.explanations.get("actions") if m4 else None) or {}
+    if acts and not acts.get("all_done") and decision == "ACCEPT":
+        missing = [x["label"].lower() for x in acts.get("actions", []) if not x["done"]]
+        decision, reason = "HUMAN_REVIEW", ("The checks passed, but these liveness actions were not detected: "
+                                            + ", ".join(missing) + ". A reviewer will look at this session.")
     if decision == "REJECT" and veto is None:
         worst = min(ok, key=lambda o: o.score)
         reason = f"{reason} Lowest check: {worst.module} ({_REASON.get(worst.module, worst.module)})."
@@ -162,7 +169,8 @@ class Pipeline:
                 doc = None
             vid_bytes = self.store.get(session_id, "video")
             vid = decode_video(vid_bytes, vcfg.get("sample_frames", 16),
-                               vcfg.get("max_seconds", 12), vcfg.get("max_side", 720))
+                               vcfg.get("max_seconds", 12), vcfg.get("max_side", 720),
+                               full_every_ms=float(vcfg.get("full_every_ms", 0)))
             steps = challenge_from_json(challenge)
             trained = any(not isinstance(m, PlaceholderModule) for m in self.modules.values())
             analysis = None

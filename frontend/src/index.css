@@ -1,6 +1,46 @@
 @import "tailwindcss";
 
+:root {
+  color-scheme: light;
+}
+
+body {
+  background: radial-gradient(1200px 600px at 10% -10%, #dbeafe 0%, transparent 60%),
+    radial-gradient(900px 500px at 110% 0%, #ede9fe 0%, transparent 55%), #f8fafc;
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
 :focus-visible {
   outline: 3px solid #2563eb;
   outline-offset: 2px;
+}
+
+@utility card {
+  @apply bg-white/90 backdrop-blur rounded-2xl shadow-sm ring-1 ring-slate-200 p-6;
+}
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 font-medium transition
+    disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+@utility btn-primary {
+  @apply btn bg-blue-600 text-white hover:bg-blue-700 shadow-sm;
+}
+
+@utility btn-danger {
+  @apply btn bg-rose-600 text-white hover:bg-rose-700 shadow-sm;
+}
+
+@utility btn-ghost {
+  @apply btn bg-white text-slate-700 ring-1 ring-slate-300 hover:bg-slate-50;
+}
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(225, 29, 72, 0.6); }
+  100% { box-shadow: 0 0 0 14px rgba(225, 29, 72, 0); }
+}
+
+.rec-dot {
+  animation: pulse-ring 1.2s infinite;
 }

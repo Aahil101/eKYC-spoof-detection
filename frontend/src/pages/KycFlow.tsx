@@ -4,6 +4,12 @@ import { createSession, submit, uploadDocument, uploadVideo, type CreatedSession
 import Recorder from "../components/Recorder";
 
 type Step = "consent" | "document" | "video" | "submitting";
+const STEPS: { key: Step; label: string }[] = [
+  { key: "consent", label: "Consent" },
+  { key: "document", label: "ID document" },
+  { key: "video", label: "Selfie video" },
+  { key: "submitting", label: "Analysis" },
+];
 
 export default function KycFlow({ cfg }: { cfg: PublicConfig }) {
   const nav = useNavigate();
@@ -12,6 +18,7 @@ export default function KycFlow({ cfg }: { cfg: PublicConfig }) {
   const [session, setSession] = useState<CreatedSession | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [docName, setDocName] = useState<string | null>(null);
 
   async function start() {
     setBusy(true);
@@ -35,6 +42,7 @@ export default function KycFlow({ cfg }: { cfg: PublicConfig }) {
     setError(null);
     try {
       await uploadDocument(session, f);
+      setDocName(f.name);
       setStep("video");
     } catch (e) {
       setError(String(e));
@@ -45,6 +53,7 @@ export default function KycFlow({ cfg }: { cfg: PublicConfig }) {
 
   async function onVideo(blob: Blob) {
     if (!session) return;
+    if (blob.size > cfg.max_video_bytes) return setError("Video too large.");
     setStep("submitting");
     setError(null);
     try {
@@ -57,72 +66,87 @@ export default function KycFlow({ cfg }: { cfg: PublicConfig }) {
     }
   }
 
+  const idx = STEPS.findIndex((s) => s.key === step);
+
   return (
     <section aria-live="polite" className="space-y-6">
-      <ol className="flex gap-4 text-sm" aria-label="Progress">
-        {["consent", "document", "video"].map((s, i) => (
-          <li key={s} className={step === s ? "font-semibold text-blue-700" : "text-slate-500"}>
-            {i + 1}. {s === "consent" ? "Consent" : s === "document" ? "ID document" : "Selfie video"}
+      <ol className="flex flex-wrap gap-2" aria-label="Progress">
+        {STEPS.map((s, i) => (
+          <li key={s.key} aria-current={i === idx ? "step" : undefined}
+            className={`flex items-center gap-2 rounded-full px-4 py-1.5 text-sm ring-1 ${i < idx ? "bg-emerald-50 ring-emerald-200 text-emerald-800"
+              : i === idx ? "bg-blue-600 ring-blue-600 text-white" : "bg-white ring-slate-200 text-slate-500"}`}>
+            <span className="font-semibold">{i < idx ? "✓" : i + 1}</span> {s.label}
           </li>
         ))}
       </ol>
 
-      {error && <p role="alert" className="text-red-700">{error}</p>}
+      {error && <p role="alert" className="card text-rose-700 py-3">{error}</p>}
 
       {step === "consent" && (
-        <div className="bg-white rounded-lg shadow p-6 space-y-4">
-          <h1 className="text-xl font-semibold">Before you start</h1>
-          <p>This research prototype checks an ID document and a short selfie video for fraud. It will:</p>
-          <ul className="list-disc pl-6 space-y-1">
-            <li>store your uploads <strong>encrypted</strong> and delete them after {cfg.media_ttl_days} days;</li>
-            <li>keep derived measurements (image-quality statistics, model scores) for research monitoring;</li>
-            <li>process facial images, which are biometric data;</li>
-            <li>let you delete everything at any time from the result page.</li>
+        <div className="card max-w-3xl space-y-4">
+          <h1 className="text-2xl font-semibold">Verify your identity</h1>
+          <p className="text-slate-600">We check an ID document and a short selfie video for fraud: deepfakes, screen or photo replays,
+            liveness, and whether your face matches the ID photo.</p>
+          <ul className="grid sm:grid-cols-2 gap-2 text-sm">
+            {[`Uploads are stored encrypted and deleted after ${cfg.media_ttl_days} days`,
+              "Derived measurements (quality statistics, scores) are kept for monitoring",
+              "Facial images are biometric data",
+              "You can delete everything from the result page"].map((t) => (
+              <li key={t} className="rounded-xl bg-slate-50 ring-1 ring-slate-200 px-3 py-2">{t}</li>))}
           </ul>
-          <p className="text-sm text-slate-600">
-            Use only your own face and a <strong>synthetic or specimen ID</strong>. Never upload a real person's ID
-            document. Consent text version {cfg.consent_version}. Details: docs/PRIVACY.md.
-          </p>
+          <p className="text-sm text-slate-500">Use only your own face and a <strong>synthetic or specimen ID</strong>, never a real person's
+            ID document. Consent text version {cfg.consent_version}.</p>
           <label className="flex items-start gap-2">
-            <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-1" />
+            <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-1 h-4 w-4" />
             <span>I consent to the processing described above.</span>
           </label>
-          <button disabled={!agree || busy} onClick={start}
-            className="px-4 py-2 rounded bg-blue-700 text-white disabled:opacity-50">Continue</button>
+          <button disabled={!agree || busy} onClick={start} className="btn-primary">Continue →</button>
         </div>
       )}
 
-      {step === "document" && (
-        <div className="bg-white rounded-lg shadow p-6 space-y-4">
-          <h1 className="text-xl font-semibold">Upload ID document</h1>
-          <label htmlFor="doc" className="block">JPEG, PNG, WebP or PDF (first page used).</label>
-          <input id="doc" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" disabled={busy}
+      {step === "document" && session && (
+        <div className="card max-w-3xl space-y-4">
+          <h1 className="text-2xl font-semibold">Upload your ID document</h1>
+          <label htmlFor="doc"
+            className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 p-10 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/50">
+            <span className="text-4xl" aria-hidden>🪪</span>
+            <span className="font-medium">Click to choose a file</span>
+            <span className="text-sm text-slate-500">JPEG, PNG, WebP or PDF (first page) · max {Math.round(cfg.max_document_bytes / 1048576)} MB</span>
+          </label>
+          <input id="doc" type="file" className="sr-only" accept="image/jpeg,image/png,image/webp,application/pdf" disabled={busy}
             onChange={(e) => onDocument(e.target.files?.[0])} />
+          {busy && <p className="text-sm text-slate-600">Uploading…</p>}
+          {cfg.demo_mode && (
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <button onClick={() => setStep("video")} className="btn-ghost">Skip: test the video only</button>
+              <span className="text-slate-500">Demo mode: the document check and face match are then not run.</span>
+            </div>
+          )}
         </div>
       )}
 
       {step === "video" && session && (
-        <>
-          <Recorder challenge={session.challenge} durationMs={session.duration_ms} onDone={onVideo} />
+        <div className="space-y-4">
+          {docName && <p className="text-sm text-emerald-700">✓ ID document uploaded: {docName}</p>}
+          <Recorder maxMs={session.duration_ms} onDone={onVideo} />
           {cfg.demo_mode && (
-            <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 space-y-2">
+            <div className="card space-y-2 bg-amber-50/80 ring-amber-200">
               <label htmlFor="vidfile" className="block text-sm font-medium">
-                Demo mode only: upload a video file instead of recording (e.g. a dataset clip to test deepfake detection).
-                Challenge-response liveness cannot be verified for uploaded files.
+                Demo mode: or upload a video file (e.g. a dataset clip to test deepfake detection)
               </label>
-              <input id="vidfile" type="file" accept="video/mp4,video/webm,video/quicktime"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (!f) return;
-                  if (f.size > cfg.max_video_bytes) return setError("File too large.");
-                  onVideo(f);
-                }} />
+              <input id="vidfile" type="file" accept="video/mp4,video/webm,video/quicktime" className="text-sm"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) onVideo(f); }} />
             </div>
           )}
-        </>
+        </div>
       )}
 
-      {step === "submitting" && <p>Uploading and queueing analysis…</p>}
+      {step === "submitting" && (
+        <div className="card max-w-3xl flex items-center gap-4">
+          <span className="h-8 w-8 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin" aria-hidden />
+          <p>Uploading and starting the analysis…</p>
+        </div>
+      )}
     </section>
   );
 }

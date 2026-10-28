@@ -38,7 +38,9 @@ def _resize_max_side(img: np.ndarray, max_side: int) -> np.ndarray:
 
 
 def decode_video(data: bytes, sample_frames: int = 16, max_seconds: float = 12.0,
-                 max_side: int = 720, dense_max_side: int = 0) -> DecodedVideo:
+                 max_side: int = 720, dense_max_side: int = 0, full_every_ms: float = 0.0) -> DecodedVideo:
+    """full_every_ms > 0 keeps a full-resolution frame only every full_every_ms (memory bound for long
+    free-form recordings); dense (downscaled) frames are still kept for every decoded frame."""
     try:
         container = av.open(io.BytesIO(data))
     except Exception as e:  # PyAV raises several error types
@@ -48,14 +50,26 @@ def decode_video(data: bytes, sample_frames: int = 16, max_seconds: float = 12.0
             raise MediaError("no video stream")
         stream = container.streams.video[0]
         codec = stream.codec_context.name
-        all_frames: list[np.ndarray] = []
-        times: list[float] = []
+        all_frames: list[np.ndarray] = []      # full-resolution frames kept
+        times: list[float] = []                # their timestamps
+        all_times: list[float] = []            # every decoded frame (fps / jitter / dense)
+        dense: list[np.ndarray] = []
+        last_kept = -1e18
         for frame in container.decode(stream):
-            t = float(frame.pts * frame.time_base) * 1000.0 if frame.pts is not None else len(times) * 33.3
-            if t > max_seconds * 1000.0:
+            t = float(frame.pts * frame.time_base) * 1000.0 if frame.pts is not None else len(all_times) * 33.3
+            if all_times and t - all_times[0] > max_seconds * 1000.0:
                 break
-            all_frames.append(_resize_max_side(frame.to_ndarray(format="bgr24"), max_side))
-            times.append(t)
+            img = None
+            if not full_every_ms or t - last_kept >= full_every_ms:
+                img = _resize_max_side(frame.to_ndarray(format="bgr24"), max_side)
+                all_frames.append(img)
+                times.append(t)
+                last_kept = t
+            if dense_max_side:
+                if img is None:
+                    img = frame.to_ndarray(format="bgr24")
+                dense.append(_resize_max_side(img, dense_max_side))
+            all_times.append(t)
         bitrate = container.bit_rate or stream.bit_rate
         width, height = stream.codec_context.width, stream.codec_context.height
     except MediaError:
@@ -68,10 +82,11 @@ def decode_video(data: bytes, sample_frames: int = 16, max_seconds: float = 12.0
     if len(all_frames) < 2:
         raise MediaError("video has fewer than 2 decodable frames")
 
-    t0 = times[0]
+    t0 = all_times[0]
     times = [t - t0 for t in times]
-    duration_ms = times[-1]
-    dts = np.diff(times)
+    all_times = [t - t0 for t in all_times]
+    duration_ms = all_times[-1]
+    dts = np.diff(all_times)
     fps = float(1000.0 / np.median(dts)) if np.median(dts) > 0 else 0.0
     jitter = float(np.std(dts) / np.mean(dts)) if np.mean(dts) > 0 else 0.0
     if not bitrate and duration_ms > 0:
@@ -83,16 +98,16 @@ def decode_video(data: bytes, sample_frames: int = 16, max_seconds: float = 12.0
         "codec": codec,
         "width": int(width or all_frames[0].shape[1]),
         "height": int(height or all_frames[0].shape[0]),
-        "n_frames_decoded": len(all_frames),
+        "n_frames_decoded": len(all_times),
         "duration_ms": float(duration_ms),
         "fps_measured": fps,
         "frame_interval_jitter": jitter,
         "bitrate_bps": float(bitrate or 0),
         "bytes": len(data),
     }
-    dense = [_resize_max_side(f, dense_max_side) for f in all_frames] if dense_max_side else None
     return DecodedVideo(frames=[all_frames[i] for i in idx], times_ms=[times[i] for i in idx], meta=meta,
-                        dense_frames=dense, dense_times_ms=list(times) if dense else None)
+                        dense_frames=dense if dense_max_side else None,
+                        dense_times_ms=list(all_times) if dense_max_side else None)
 
 
 def decode_document(data: bytes, content_type: str | None, max_side: int = 2000, pdf_dpi: int = 200) -> np.ndarray:
