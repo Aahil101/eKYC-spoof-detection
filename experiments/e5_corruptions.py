@@ -55,8 +55,16 @@ def main():
                    if r.is_dir() for d in range(0, 5) for p in r.glob("*/" * d + "feats/ffpp_c23__*/shard_00000.pkl")})
     res, rng = {"E5a": {}, "E5b": {}}, np.random.default_rng(0)
 
+    doc_j = list(QUALITY_KEYS).index("doc_blur_laplacian_var")
+    doc_pool = ref["reference"]["Q"][:, doc_j]
+    doc_pool = doc_pool[np.isfinite(doc_pool)]
+
     def session_arrays(recs, scores):
         Q = quality_matrix([r["quality"] for r in recs])
+        # every KYC session also carries an ID document: pair each video with a reference document value,
+        # deterministically by video id so the clean and corrupted copies get the SAME document
+        Q[:, doc_j] = [doc_pool[int(__import__("hashlib").sha256(r["id"].encode()).hexdigest()[:8], 16) % len(doc_pool)]
+                       for r in recs]
         P = np.full((len(recs), 5), np.nan)
         C = np.full((len(recs), 5), np.nan)
         for j, m in enumerate(("M1", "M2", "M3", "M4", "M5")):
@@ -90,11 +98,22 @@ def main():
         # ---- E5b: windows of corrupted sessions vs the served reference
         Sx = session_arrays(corr, {m: sc_x[m] for m in SPEC})
         Sc = session_arrays(clean, {m: sc_c[m] for m in SPEC})
-        W = min(a.window, len(corr))
+        # windows stratified to the reference class mix (FF++ part), identical indices for clean and corrupted
+        Rr = ref["reference"]
+        ffm = Rr["source"] == "ffpp"
+        cls_ref, cnt = np.unique(Rr["video_class"][ffm], return_counts=True)
+        vc = np.array(["bona_fide" if r["label"] == 1 else f"deepfake_{r['attack_type']}" for r in corr])
+        W = int(a.window)
         hits1 = hits3 = det = fa = 0
-        labels = []
+        labels, ctrl_labels = [], []
         for r in range(a.repeats):
-            idx = rng.choice(len(corr), W, replace=False)
+            parts = []
+            for c_, n_ in zip(cls_ref, cnt):
+                pool = np.flatnonzero(vc == c_)
+                k = min(len(pool), int(round(W * n_ / cnt.sum())))
+                if k:
+                    parts.append(rng.choice(pool, k, replace=False))
+            idx = np.concatenate(parts)
             rep = analyse_window(ref["reference"], {k: v[idx] for k, v in Sx.items()}, ref["novelty"], ref["quality_names"],
                                  ref.get("monitor", {}), seed=r, null=ref.get("null"))
             labels.append(rep["label"])
@@ -105,11 +124,20 @@ def main():
             hits3 += bool(set(top[:3]) & EXPECTED_FEATURE[kind])
             rep0 = analyse_window(ref["reference"], {k: v[idx] for k, v in Sc.items()}, ref["novelty"], ref["quality_names"],
                                   ref.get("monitor", {}), seed=r, null=ref.get("null"))
-            fa += rep0["label"] != "NONE"
+            fa += rep0["label"] in ("QUALITY_DRIFT", "CONCEPT_DRIFT", "NOVEL_ATTACK", "MIXED")   # input-level alarms
+            if r == 0:
+                first_top = [(f["feature"], f["drifted"], round(f["ks_q"], 4) if f["ks_q"] is not None else None,
+                              round(f.get("mean_shift_sd") or 0, 2)) for f in rep["per_feature"]
+                             if f.get("ks_q") is not None]
+            ctrl_labels.append(rep0["label"])
         res["E5b"][kind_sev] = {"window": W, "repeats": a.repeats, "detection_rate": det / a.repeats,
                                 "attribution_hit@1": hits1 / a.repeats, "attribution_hit@3": hits3 / a.repeats,
                                 "label_counts": {l: labels.count(l) for l in set(labels)},
-                                "clean_same_videos_alarm_rate": fa / a.repeats}
+                                "clean_same_videos_alarm_rate": fa / a.repeats,
+                                "control_label_counts": {l: ctrl_labels.count(l) for l in set(ctrl_labels)},
+                                "false_novelty_rate": sum(l in ("NOVEL_ATTACK", "MIXED") for l in labels) / a.repeats,
+                                "window_n": int(len(idx)), "per_feature_first_window": first_top,
+                                "note": "control alarms count input-level labels only (harness fuses M2-M4 only, so output drift vs the 5-module reference is expected)"}
         print(tag, json.dumps(res["E5b"][kind_sev]), {m: round(v["delta_auc"], 3) for m, v in e5a["modules"].items()})
     a.out.mkdir(parents=True, exist_ok=True)
     (a.out / "e5.json").write_text(json.dumps(res, indent=2))
@@ -122,13 +150,13 @@ def main():
         lines.append(f"| {k} | {v['n_videos']} | {mm['M2']['delta_auc']:+.3f} | {mm['M3']['delta_auc']:+.3f} | {mm['M4']['delta_auc']:+.3f} | "
                      f"{mm['M3']['genuine_false_reject_rate_clean']:.2f}→{mm['M3']['genuine_false_reject_rate_corrupt']:.2f} | {qs[0]} {qs[1]:+.2f} |")
     lines += ["", "## E5b: drift detection on windows of corrupted sessions (served reference + subject-level null)", "",
-              "| corruption | detection rate | attribution hit@1 | hit@3 | labels | alarm rate on the same videos uncorrupted |",
-              "|---|---|---|---|---|---|"]
+              "| corruption | detection rate | false-novelty rate | attribution hit@1 | hit@3 | labels | alarm rate, same videos uncorrupted |",
+              "|---|---|---|---|---|---|---|"]
     for k, v in res["E5b"].items():
-        lines.append(f"| {k} | {v['detection_rate']:.2f} | {v['attribution_hit@1']:.2f} | {v['attribution_hit@3']:.2f} | "
+        lines.append(f"| {k} | {v['detection_rate']:.2f} | {v['false_novelty_rate']:.2f} | {v['attribution_hit@1']:.2f} | {v['attribution_hit@3']:.2f} | "
                      f"{v['label_counts']} | {v['clean_same_videos_alarm_rate']:.2f} |")
     (a.out / "e5.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print("\n".join(lines))
+    print("\n".join(lines).encode("ascii", "replace").decode())
 
 
 if __name__ == "__main__":

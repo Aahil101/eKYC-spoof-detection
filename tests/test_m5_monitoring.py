@@ -165,7 +165,7 @@ def _pool(n, seed, source, cls_shift=0.0, q_shift=0.0, novel=False):
         A = rng.normal(0, 0.3, (n, ARTIFACT_DIM)).astype(np.float32)
         A[:, 5] += 8
     from ml.fusion import QUALITY_KEYS
-    Q = rng.normal(q_shift, 1, (n, len(QUALITY_KEYS)))
+    Q = rng.normal(5 + q_shift, 1, (n, len(QUALITY_KEYS)))     # positive like real (log1p-transformed) quality
     fused = 1 / (1 + np.exp(-(3 * y - 1.5 + rng.normal(0, 1, n))))
     return {"P": np.tile(fused[:, None], 5), "C": np.full((n, 5), 0.8), "Q": Q, "A": A, "fused": fused,
             "decisions": np.where(fused > 0.5, "ACCEPT", "REJECT"), "y": y,
