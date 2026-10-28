@@ -155,13 +155,14 @@ def test_recommendation_names_feature_and_module():
 
 
 def _pool(n, seed, source, cls_shift=0.0, q_shift=0.0, novel=False):
-    """Stream-pool shaped records (866-d artifacts = 512 CLIP + 354 LBP) for the service test."""
+    """Stream-pool shaped records (forgery-specific artifact vectors) for the service test."""
+    from monitoring.novelty import ARTIFACT_DIM
     rng = np.random.default_rng(seed)
     y = rng.integers(0, 2, n) if not novel else np.zeros(n, int)
-    A = rng.normal(0, 1, (n, 866)).astype(np.float32)
+    A = rng.normal(0, 1, (n, ARTIFACT_DIM)).astype(np.float32)
     A[:, 0] += 3 * y
     if novel:
-        A = rng.normal(0, 0.3, (n, 866)).astype(np.float32)
+        A = rng.normal(0, 0.3, (n, ARTIFACT_DIM)).astype(np.float32)
         A[:, 5] += 8
     from ml.fusion import QUALITY_KEYS
     Q = rng.normal(q_shift, 1, (n, len(QUALITY_KEYS)))

@@ -280,18 +280,44 @@ def extract_features(cfg: dict, ctx) -> dict:
         items = list_sidtd(root)
     else:
         raise ValueError(ds)
+    if p.get("split_filter"):
+        items = [it for it in items if it["split"] == p["split_filter"]]
+    if p.get("per_attack_type_max"):
+        rng0 = np.random.default_rng(cfg["seed"])
+        by: dict = {}
+        for it in items:
+            by.setdefault(it["attack_type"], []).append(it)
+        items = []
+        for t, its in sorted(by.items()):
+            n = len(its) if t == "bona_fide" else min(int(p["per_attack_type_max"]), len(its))
+            items += [its[i] for i in sorted(rng0.choice(len(its), n, replace=False))]
     if p.get("max_items"):
         rng = np.random.default_rng(cfg["seed"])
         idx = rng.choice(len(items), size=min(int(p["max_items"]), len(items)), replace=False)
         items = [items[i] for i in sorted(idx)]
     is_video = ds in ("ffpp_c23", "celebdf_v2", "msu_mfsd")
     shard_size = int(p.get("shard_size", 100))
+    corruptions = p.get("corruptions") or [None]
+    summaries = []
+    for corr in corruptions:
+        vcfg = dict(p.get("video", {}))
+        tag = ds
+        if corr:
+            vcfg["corruption"] = corr
+            tag = f"{ds}__{corr['kind']}{corr['severity']}"
+        summaries.append(_extract_set(cfg, ctx, p, ds, tag, items, is_video, shard_size, vcfg, root))
+    summary = summaries[0] if len(summaries) == 1 else {"sets": summaries, "finished": all(s["finished"] for s in summaries)}
+    ctx.save_artifact("extract_summary.json", json.dumps(summary, indent=2).encode())
+    return summary
+
+
+def _extract_set(cfg, ctx, p, ds, tag, items, is_video, shard_size, vcfg, root) -> dict:
     shards = [items[i:i + shard_size] for i in range(0, len(items), shard_size)]
-    out = _out_root() / "feats" / ds
+    out = _out_root() / "feats" / tag
     out.mkdir(parents=True, exist_ok=True)
     (out / "items.json").write_text(json.dumps({"n": len(items), "items_sha256": hashlib.sha256(
         json.dumps([it["id"] for it in items]).encode()).hexdigest(), "shard_size": shard_size}, indent=1))
-    ctx.log("listed", dataset=ds, n_items=len(items), n_shards=len(shards), root=str(root))
+    ctx.log("listed", dataset=tag, n_items=len(items), n_shards=len(shards), root=str(root))
 
     clip = arc = None
     from ml.common.weights import path_for
@@ -308,7 +334,7 @@ def extract_features(cfg: dict, ctx) -> dict:
     try:
         for si, shard in enumerate(shards):
             name = f"shard_{si:05d}.pkl"
-            ex = _find_existing_shard(ds, name, out)
+            ex = _find_existing_shard(tag, name, out)
             if ex is not None:
                 if ex != out / name:
                     shutil.copy2(ex, out / name)
@@ -317,7 +343,7 @@ def extract_features(cfg: dict, ctx) -> dict:
             if ctx.out_of_time():
                 ctx.log("budget_exhausted", shard=si)
                 break
-            args = [(it, p.get("video", {})) if is_video else (it, ds) for it in shard]
+            args = [(it, vcfg) if is_video else (it, ds) for it in shard]
             fn = _video_worker if is_video else _image_worker
             results = pool.imap(fn, args, chunksize=1) if pool else map(fn, args)
             recs = []
@@ -343,10 +369,8 @@ def extract_features(cfg: dict, ctx) -> dict:
             pool.close()
             pool.join()
     complete = all((out / f"shard_{i:05d}.pkl").exists() for i in range(len(shards)))
-    summary = {"dataset": ds, "n_items": len(items), "n_shards": len(shards), "shards_done_now": done,
-               "shards_reused": skipped, "errors": errors, "finished": complete}
-    ctx.save_artifact("extract_summary.json", json.dumps(summary, indent=2).encode())
-    return summary
+    return {"dataset": tag, "n_items": len(items), "n_shards": len(shards), "shards_done_now": done,
+            "shards_reused": skipped, "errors": errors, "finished": complete}
 
 
 # ================================================================== training

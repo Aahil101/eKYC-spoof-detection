@@ -1,0 +1,29 @@
+job: extract_features
+run_name: feats_ffpp_corrupt
+implemented: true
+seed: 0
+description: "E5a/E5b: FF++ c23 TEST split (all 140 real + 40 per manipulation) re-extracted under 5 controlled corruptions (severity 2)."
+params:
+  dataset: ffpp_c23
+  split_filter: test
+  per_attack_type_max: 40
+  shard_size: 50
+  workers: 4
+  corruptions:
+    - {kind: blur, severity: 2}
+    - {kind: downscale, severity: 2}
+    - {kind: jpeg, severity: 2}
+    - {kind: lowlight, severity: 2}
+    - {kind: noise, severity: 2}
+  video: {sample_frames: 16, max_seconds: 12, max_side: 720, dense_side: 320, dense_seconds: 8, dense_fps: 15, arc_frames: 4}
+modes:
+  smoke: {max_items: 2, workers: 1, device: cpu, corruptions: [{kind: blur, severity: 2}]}
+  full: {}
+checkpoint: {every_steps: 1000000, every_minutes: 1000, keep_last: 1}
+budget: {max_wall_minutes: 690}
+data: {datasets: [ffpp_c23]}
+kaggle:
+  accelerator: gpu
+  internet: true
+  pip_packages: [mediapipe==1.1.1, open_clip_torch==3.3.0, onnxruntime==1.31.0, av==19.0.2]
+  weights_datasets: []

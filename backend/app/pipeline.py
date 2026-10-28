@@ -211,7 +211,9 @@ class Pipeline:
                                        explanations=_jsonable(o.explanations), message=o.message))
             if analysis:
                 # artifact-space embeddings for novelty detection (never identity)
-                for space, vec in (("m2_clip", analysis["m2_vec"].get("clip_mean")),
+                from monitoring.novelty import ARTIFACT_SPACE, artifact_vector
+                for space, vec in ((ARTIFACT_SPACE, artifact_vector(analysis["m2_vec"], analysis["m2"])),
+                                   ("m2_clip", analysis["m2_vec"].get("clip_mean")),
                                    ("m3_lbp", analysis["m3_vec"].get("lbp")),
                                    ("m1_spectrum", (analysis.get("doc") or {}).get("m1_vec", {}).get("spectrum"))):
                     if vec is not None:

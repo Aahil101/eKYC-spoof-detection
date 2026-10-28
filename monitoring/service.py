@@ -40,9 +40,10 @@ def _session_arrays(db, sessions: list[KYCSession]) -> dict:
         embs.setdefault(e.session_id, {})[e.space] = np.frombuffer(e.vector, "<f4")
     A, Q, fused, dec, P = [], [], [], [], []
     for s in sessions:
+        from monitoring.novelty import ARTIFACT_DIM, ARTIFACT_SPACE
         e = embs.get(s.id, {})
-        clip, lbp = e.get("m2_clip"), e.get("m3_lbp")
-        A.append(np.r_[clip if clip is not None else np.full(512, np.nan), lbp if lbp is not None else np.full(354, np.nan)])
+        a = e.get(ARTIFACT_SPACE)
+        A.append(a if a is not None and len(a) == ARTIFACT_DIM else np.full(ARTIFACT_DIM, np.nan))
         Q.append(qual.get(s.id) or {})
         fused.append(s.fused_score if s.fused_score is not None else np.nan)
         dec.append(s.decision or "UNAVAILABLE")
@@ -166,9 +167,9 @@ def simulate(sm, ref: dict, bundle_version: str, scenario: str, n: int = 200, se
             qv = {name: (None if not np.isfinite(pool["Q"][j, c]) else float(pool["Q"][j, c]))
                   for c, name in enumerate(ref["quality_names"])}
             db.add(QualityRow(session_id=sid, values=_unlog(qv)))
-            a = pool["A"][j]
-            db.add(EmbeddingRow(session_id=sid, space="m2_clip", dim=512, vector=a[:512].astype("<f4").tobytes()))
-            db.add(EmbeddingRow(session_id=sid, space="m3_lbp", dim=354, vector=a[512:].astype("<f4").tobytes()))
+            from monitoring.novelty import ARTIFACT_SPACE
+            a = pool["A"][j].astype("<f4")
+            db.add(EmbeddingRow(session_id=sid, space=ARTIFACT_SPACE, dim=len(a), vector=a.tobytes()))
         db.commit()
     return {"inserted": int(len(sel)), "scenario": scenario, "ground_truth_note":
             {"stationary": "known classes, unseen subjects", "domain_drift": "Celeb-DF genuine replace FF++/MSU genuine",

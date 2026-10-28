@@ -181,7 +181,7 @@ def cluster_candidates(Z: np.ndarray, min_cluster_size: int = 8, eps: float | No
         sil = float(silhouette_score(Z, lab))
     return {"labels": lab, "clusters": clusters, "silhouette": sil, "eps": float(eps)}
 
-CANDIDATES = [("pca", 8), ("pca", 32), ("pca", 128), ("lda", 64)]
+CANDIDATES = [("pca", 8), ("pca", 32), ("pca", 128), ("lda", 64), ("lda", 128)]
 SCORERS = ("mahalanobis", "knn", "iforest", "lof")
 
 
@@ -215,3 +215,19 @@ def select_config(X_raw: np.ndarray, labels, seed: int = 0) -> dict:
     kind_k, scorer = best.split("/")
     kind = "lda" if kind_k.startswith("lda") else "pca"
     return {"kind": kind, "k": int(kind_k[3:]), "scorer": scorer, "loco": summary, "classes": classes}
+
+# ---------------------------------------------------------------- forgery-specific artifact vector (E6 pilot)
+M2_SCALARS = ("m2_clip_temporal_mean_step", "m2_clip_temporal_max_step", "m2_clip_consistency",
+              "m2_landmark_jitter", "m2_hf_spectrum_tail")
+ARTIFACT_DIM = 512 + 24 + len(M2_SCALARS)
+ARTIFACT_SPACE = "m2_forgery"   # CLIP face embedding + azimuthal spectrum + temporal M2 cues (no LBP, no identity)
+
+
+def artifact_vector(m2_vec: dict, m2_scalars: dict) -> np.ndarray:
+    """Selected by leave-one-known-method-out on the reference (docs/EXPERIMENTS.md E6): generic CLIP+LBP made a
+    held-out manipulation method look in-distribution (AUROC ~0.40); this forgery-specific vector + LDA + kNN
+    gives 0.65 without capture-domain confounding."""
+    clip = np.asarray(m2_vec.get("clip_mean", np.full(512, np.nan)), np.float32)
+    spec = np.asarray(m2_vec.get("spectrum", np.full(24, np.nan)), np.float32)
+    sc = np.array([(m2_scalars or {}).get(k, np.nan) for k in M2_SCALARS], np.float32)
+    return np.r_[clip, spec, sc].astype(np.float32)

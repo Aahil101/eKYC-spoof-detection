@@ -109,6 +109,11 @@ def analyse_video(data: bytes, cfg: dict | None = None, challenge=None, audio_tr
     c = {**VIDEO_DEFAULTS, **(cfg or {})}
     v = decode_video(data, c["sample_frames"], c["max_seconds"], c["max_side"], dense_max_side=c["dense_side"])
     dframes, dtimes = _subsample_dense(v.dense_frames, v.dense_times_ms, c["dense_seconds"], c["dense_fps"])
+    if c.get("corruption"):                       # E5: controlled capture degradation before ALL features
+        from ml.features.corruptions import corrupt_all
+        kind, sev = c["corruption"]["kind"], int(c["corruption"]["severity"])
+        v.frames = corrupt_all(v.frames, kind, sev, seed=1)
+        dframes = corrupt_all(dframes, kind, sev, seed=2)
     with FaceAnalyzer() as fa:
         faces, n_faces = fa.process_all(v.frames, v.times_ms)
     with FaceAnalyzer() as fa:
