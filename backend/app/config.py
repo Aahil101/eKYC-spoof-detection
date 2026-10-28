@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     config_dir: Path = REPO_ROOT / "config"
     max_document_bytes: int = 10 * 1024 * 1024
     max_video_bytes: int = 50 * 1024 * 1024
+    # Uploading a pre-recorded video (instead of recording in the browser) bypasses live capture, which makes
+    # video-injection attacks easier. Allowed in demo mode, or explicitly with ALLOW_VIDEO_UPLOAD=1.
+    allow_video_upload: bool = False
     log_level: str = "INFO"
     run_jobs_inline: bool = False   # tests: run pipeline synchronously
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"

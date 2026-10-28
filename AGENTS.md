@@ -66,7 +66,9 @@ Then set `MODEL_BUNDLE=kyc-v0.4`. The heads come from `codmav-train-heads` v3 (f
 - `ml/features/liveness.detect_actions` finds blink / turn left / turn right / look up / look down in 8 fps frames over the whole video, using geometric pose relative to the neutral pose. The thresholds are heuristic and **unvalidated**, so missing actions cap ACCEPT at HUMAN_REVIEW.
 - Model frames: the 16 most frontal of 32 candidates spread over the whole video (`frontal_pool`), so head turns don't push the models off their mostly frontal training distribution. The defaults in `VIDEO_DEFAULTS` keep Kaggle extraction identical to training.
 - The result page shows the video verdict (REAL PERSON / DEEPFAKE DETECTED / SPOOF SUSPECTED / UNCERTAIN), plus per-frame deepfake scores from the M2 head applied to single-frame CLIP embeddings. These are indicative only, because the head was trained on 16-frame means.
-- In demo mode the ID document can be skipped (M1/M5 not applicable), and a video file can be uploaded instead of recording.
+- In demo mode the ID document can be skipped. M1/M5 are then not applicable and the decision is UNAVAILABLE: the fusion was fitted only on sessions that include a document, and it outputs ~1e-6 without one.
+- Video upload: a Record / Upload tab, enabled in demo mode or with `ALLOW_VIDEO_UPLOAD=1`. Uploading bypasses live capture (video-injection risk). `?capture=upload|camera` is stored in `client_meta` and shown on Dashboard 2.
+- Dashboard 2 live feed: `GET /api/monitor/sessions?source=live|simulated|all` (`monitoring/service.live_sessions`), auto-refreshed every 4 s. Per session it shows module scores, the verdict and the actions. It also shows a capture check: quality features outside the central 98% of the reference. And it shows the conformal artifact-novelty p-value. Window-level drift still needs ≥ max(30, W/4) sessions, because the null is calibrated for windows of W.
 
 ### History notes
 - Heads must be trained with **scikit-learn 1.9.1** (pinned), because pickles must match the serving version.

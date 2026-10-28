@@ -180,3 +180,78 @@ def _unlog(qv: dict) -> dict:
     """Stream-pool quality values are stored log1p-transformed (ml.fusion.quality_matrix); undo for the log."""
     from ml.fusion import LOG_KEYS
     return {k: (float(np.expm1(v)) if (v is not None and k in LOG_KEYS) else v) for k, v in qv.items()}
+
+
+def live_sessions(sm, ref: dict | None, bundle_version: str, source: str | None = "live", limit: int = 50) -> dict:
+    """Recent analysed sessions (newest first) with PER-SESSION checks against the bundle's reference:
+      - capture check: each quality feature's two-sided empirical p-value within the reference distribution;
+        features outside the central 98% are listed (one session cannot show drift, but it can be unusual);
+      - artifact novelty: conformal p-value of the session's artifact vector under the reference novelty model.
+    Window-level drift / novelty needs many sessions (run_window); counts towards that are returned too."""
+    with sm() as db:
+        q = select(KYCSession).where(KYCSession.bundle_version == bundle_version,
+                                     KYCSession.status.in_(("completed", "failed", "processing", "queued")))
+        if source:
+            q = q.where(KYCSession.source == source)
+        rows = list(db.scalars(q.order_by(KYCSession.created_at.desc()).limit(limit)))
+        done = [s for s in rows if s.status == "completed"]
+        arr = _session_arrays(db, done) if done else None
+        mods = {(m.session_id, m.module): m for m in db.scalars(
+            select(ModuleOutputRow).where(ModuleOutputRow.session_id.in_([s.id for s in done])))} if done else {}
+        n_total = db.query(KYCSession).filter(KYCSession.status == "completed",
+                                              KYCSession.bundle_version == bundle_version,
+                                              *( [KYCSession.source == source] if source else [])).count()
+        names = ref["quality_names"] if ref else []
+        RQ = ref["reference"]["Q"] if ref else None
+        pv = None
+        if ref and arr is not None:
+            A = arr["A"]
+            okA = np.isfinite(A).all(1)
+            pv = np.full(len(A), np.nan)
+            if okA.any():
+                sc = ref["novelty"].scores(A[okA])
+                scorer = (ref.get("monitor") or {}).get("scorer", "mahalanobis")
+                key = scorer if scorer in sc else next(iter(sc))
+                pv[okA] = ref["novelty"].pvalues({key: sc[key]})[key]
+        out = []
+        di = {s.id: i for i, s in enumerate(done)}
+        for s in rows:
+            item = {"session_id": s.id, "created_at": s.created_at, "status": s.status, "source": s.source,
+                    "capture": (s.client_meta or {}).get("capture"), "decision": s.decision,
+                    "fused_score": s.fused_score, "decision_reason": s.decision_reason}
+            if s.id in di:
+                i = di[s.id]
+                item["scores"] = {m: (None if not np.isfinite(arr["P"][i, j]) else float(arr["P"][i, j]))
+                                  for j, m in enumerate(MODULES)}
+                m4 = mods.get((s.id, "M4"))
+                acts = ((m4.explanations or {}).get("actions") if m4 else None) or {}
+                if acts:
+                    item["liveness_actions"] = {"done": sum(a["done"] for a in acts.get("actions", [])),
+                                                "total": len(acts.get("actions", []))}
+                unusual = []
+                if RQ is not None:
+                    for j, k in enumerate(names):
+                        v = arr["Q"][i, j]
+                        r = RQ[:, j][np.isfinite(RQ[:, j])]
+                        if not np.isfinite(v) or len(r) < 20:
+                            continue
+                        lo, hi = (r < v).mean(), (r > v).mean()
+                        p2 = float(min(1.0, 2 * min(lo + (r == v).mean() / 2, hi + (r == v).mean() / 2)))
+                        if p2 < 0.02:
+                            unusual.append({"feature": k, "p_two_sided": round(p2, 4),
+                                            "direction": "high" if hi < lo else "low",
+                                            "value": float(np.expm1(v)) if k in _LOG else float(v),
+                                            "reference_median": float(np.expm1(np.median(r))) if k in _LOG else float(np.median(r))})
+                item["capture_check"] = {"unusual_features": unusual, "status": "unusual" if unusual else "typical"}
+                if pv is not None and np.isfinite(pv[i]):
+                    item["artifact_novelty_p"] = float(pv[i])
+            out.append(item)
+    W = int(ref.get("window", 200)) if ref else 200
+    need = max(30, W // 4)
+    return {"source": source or "all", "sessions": out, "n_completed": n_total,
+            "window": {"size": W, "min_sessions": need, "ready": n_total >= need},
+            "reference_available": ref is not None,
+            "note": "Per-session checks flag unusual inputs; drift and novel-attack decisions need a window of sessions."}
+
+
+from ml.fusion import LOG_KEYS as _LOG  # noqa: E402

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import LiveFeed from "../components/LiveFeed";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 // Admin API: loopback-only in demo mode; otherwise an X-API-Key is required (kept in sessionStorage only).
@@ -41,6 +42,7 @@ export default function Monitor() {
   const [busy, setBusy] = useState(false);
   const [win, setWin] = useState(200);
   const [alpha, setAlpha] = useState(0.05);
+  const [src, setSrc] = useState<"all" | "live" | "simulated">("all");
   const [key, setKey] = useState(sessionStorage.getItem("codmav-admin-key") ?? "");
 
   const load = useCallback(async () => {
@@ -90,7 +92,11 @@ export default function Monitor() {
           <input type="number" min={50} max={1000} value={win} onChange={(e) => setWin(+e.target.value)} className="ml-2 rounded-lg ring-1 ring-slate-300 px-2 py-1 w-24" /></label>
         <label className="text-sm">α
           <input type="number" step={0.01} min={0.001} max={0.2} value={alpha} onChange={(e) => setAlpha(+e.target.value)} className="ml-2 rounded-lg ring-1 ring-slate-300 px-2 py-1 w-20" /></label>
-        <button disabled={busy} onClick={() => act(`/api/monitor/run?window=${win}&alpha=${alpha}`)} className="btn-primary">Analyse latest window</button>
+        <label className="text-sm">Data
+          <select value={src} onChange={(e) => setSrc(e.target.value as typeof src)} className="ml-2 rounded-lg ring-1 ring-slate-300 px-2 py-1">
+            <option value="all">all sessions</option><option value="live">live only</option><option value="simulated">simulated only</option>
+          </select></label>
+        <button disabled={busy} onClick={() => act(`/api/monitor/run?window=${win}&alpha=${alpha}${src === "all" ? "" : `&source=${src}`}`)} className="btn-primary">Analyse latest window</button>
         <span className="text-sm text-slate-600">Simulate (held-out features, no media):</span>
         {(["stationary", "domain_drift", "unseen_generator"] as const).map((s) => (
           <button key={s} disabled={busy} onClick={() => act(`/api/monitor/simulate?scenario=${s}&n=${win}&seed=${Date.now() % 1000}`)}
@@ -100,6 +106,8 @@ export default function Monitor() {
             className="ml-2 rounded-lg ring-1 ring-slate-300 px-2 py-1 w-36" aria-label="Admin API key (not needed in demo mode)" /></label>
       </div>
       {err && <p role="alert" className="text-red-700">{err}</p>}
+
+      <LiveFeed api={api} />
 
       <div className="card">
         <h2 className="font-semibold mb-2">Drift timeline</h2>

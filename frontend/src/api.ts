@@ -9,6 +9,7 @@ export type PublicConfig = {
   placeholder_bundle: boolean;
   max_document_bytes: number;
   max_video_bytes: number;
+  allow_video_upload: boolean;
 };
 
 export type CreatedSession = { session_id: string; token: string; challenge: ChallengeStep[]; duration_ms: number };
@@ -75,10 +76,10 @@ export async function createSession(consentVersion: string): Promise<CreatedSess
   return (await check(res)).json();
 }
 
-async function upload(s: CreatedSession, kind: "document" | "video", blob: Blob, filename: string) {
+async function upload(s: CreatedSession, kind: "document" | "video", blob: Blob, filename: string, query = "") {
   const fd = new FormData();
   fd.append("file", blob, filename);
-  await check(await fetch(`/api/sessions/${s.session_id}/${kind}`, {
+  await check(await fetch(`/api/sessions/${s.session_id}/${kind}${query}`, {
     method: "POST",
     headers: { "X-Session-Token": s.token },
     body: fd,
@@ -86,8 +87,8 @@ async function upload(s: CreatedSession, kind: "document" | "video", blob: Blob,
 }
 
 export const uploadDocument = (s: CreatedSession, f: File) => upload(s, "document", f, f.name);
-export const uploadVideo = (s: CreatedSession, b: Blob) =>
-  upload(s, "video", b, b.type.includes("mp4") ? "selfie.mp4" : "selfie.webm");
+export const uploadVideo = (s: CreatedSession, b: Blob, capture: "camera" | "upload" = "camera") =>
+  upload(s, "video", b, b.type.includes("mp4") ? "selfie.mp4" : "selfie.webm", `?capture=${capture}`);
 
 export async function submit(s: CreatedSession) {
   await check(await fetch(`/api/sessions/${s.session_id}/submit`, {

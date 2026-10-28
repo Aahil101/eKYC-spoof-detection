@@ -87,6 +87,13 @@ def decide(outputs: list[ModuleOutput], policy: dict, fusion: dict | None = None
                 "fused_score": None, "fused_uncertainty": None, "weights": {}, "veto": None}
     from ml.fusion import MODULES, FusionInput, quality_matrix
     by = {o.module: o for o in ok}
+    if "M1" not in by:
+        # The fusion model and its thresholds were fitted on sessions that ALWAYS contain an ID document; with
+        # no document its output is an extrapolation (measured: P(genuine) ~1e-6 for genuine videos), so no
+        # KYC decision is issued. The per-module video checks remain valid and are shown.
+        return {"decision": "UNAVAILABLE", "reason": "No ID document was provided, so no KYC decision is made. "
+                "The video checks (deepfake, replay, liveness) are shown above.",
+                "fused_score": None, "fused_uncertainty": None, "weights": {}, "veto": None}
     P = np.array([[by[m].score if m in by else np.nan for m in MODULES]], float)
     C = np.array([[by[m].confidence if m in by else np.nan for m in MODULES]], float)
     fi = FusionInput(P, C, quality_matrix([quality or {}]))

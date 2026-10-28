@@ -201,3 +201,15 @@ def test_service_simulate_window_report_alert(tmp_path):
         assert db.query(DriftReport).count() == 2
         al = db.query(Alert).all()
         assert len(al) == 1 and al[0].bundle_version == "v1" and al[0].evidence["tests"]["H_Q"]
+    # live feed: per-session checks; simulated domain-drift sessions are flagged as unusual captures more
+    # often than stationary ones, and there are no live sessions yet
+    from monitoring.service import live_sessions
+    assert live_sessions(sm, ref, "v1", "live")["sessions"] == []
+    feed = live_sessions(sm, ref, "v1", "simulated", 200)
+    assert feed["n_completed"] >= 300 and feed["window"]["ready"]
+    rows = feed["sessions"]
+    assert len(rows) == 200 and all("capture_check" in r and "scores" in r for r in rows)
+    ps = [r["artifact_novelty_p"] for r in rows if "artifact_novelty_p" in r]
+    assert ps and all(0 < p <= 1 for p in ps)
+    unusual = np.mean([r["capture_check"]["status"] == "unusual" for r in rows])
+    assert unusual > 0.3, unusual            # the newest 200 are the domain-drift sessions (q_shift 1.5)

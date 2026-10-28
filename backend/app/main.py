@@ -108,7 +108,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                             media_ttl_days=settings.media_ttl_days, bundle_version=bundle_version,
                             placeholder_bundle=bundle_version == PLACEHOLDER_BUNDLE_VERSION,
                             max_document_bytes=settings.max_document_bytes,
-                            max_video_bytes=settings.max_video_bytes)
+                            max_video_bytes=settings.max_video_bytes,
+                            allow_video_upload=settings.demo_mode or settings.allow_video_upload)
 
     @app.post("/api/sessions", response_model=CreateSessionResponse, status_code=201)
     def create_session(body: CreateSessionRequest):
@@ -150,18 +151,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         _mark_uploading(s.id)
 
     @app.post("/api/sessions/{session_id}/video", status_code=204)
-    async def upload_video(file: UploadFile = File(...), s: KYCSession = Depends(get_session_authorized)):
+    async def upload_video(file: UploadFile = File(...), capture: str = "camera",
+                           s: KYCSession = Depends(get_session_authorized)):
         _check_open(s)
+        if capture not in ("camera", "upload"):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "capture must be camera|upload")
+        if capture == "upload" and not (settings.demo_mode or settings.allow_video_upload):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "uploading a pre-recorded video is disabled")
         data = await _read_limited(file, settings.max_video_bytes)
         if not _sniff_video(data):
             raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "video must be WebM or MP4")
         store.put(s.id, "video", data)
-        _mark_uploading(s.id)
+        _mark_uploading(s.id, capture)
 
-    def _mark_uploading(sid: str):
+    def _mark_uploading(sid: str, capture: str | None = None):
         with sm() as db:
             row = db.get(KYCSession, sid)
             row.status = "uploading"
+            if capture:        # camera = recorded in the browser; upload = pre-recorded file (shown on Dashboard 2)
+                row.client_meta = {**(row.client_meta or {}), "capture": capture}
             db.commit()
 
     @app.post("/api/sessions/{session_id}/submit", status_code=202)
@@ -237,7 +245,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # ---------------- Dashboard 2: monitoring (admin) ----------------
     from backend.app.db import Alert, DriftReport
-    from monitoring.service import load_reference, run_window, simulate
+    from monitoring.service import live_sessions, load_reference, run_window, simulate
     app.state.reference = load_reference(bundle_dir)
 
     def _ref():
@@ -263,6 +271,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     source: str | None = None):
         params = {k: v for k, v in (("alpha", alpha), ("alpha_novel", alpha_novel)) if v is not None}
         return run_window(sm, _ref(), bundle_version, window, params, source)
+
+    @app.get("/api/monitor/sessions", dependencies=[Depends(auth.require_admin)])
+    def monitor_sessions(source: str = "live", limit: int = 50):
+        """Live feed of analysed KYC sessions with per-session drift / novelty checks against the reference."""
+        if source not in ("live", "simulated", "all"):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "source must be live|simulated|all")
+        return live_sessions(sm, app.state.reference, bundle_version, None if source == "all" else source,
+                             max(1, min(limit, 200)))
 
     @app.post("/api/monitor/simulate", dependencies=[Depends(auth.require_admin)])
     def monitor_simulate(scenario: str = "stationary", n: int = 200, seed: int = 0):

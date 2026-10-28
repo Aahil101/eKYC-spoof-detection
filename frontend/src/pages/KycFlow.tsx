@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createSession, submit, uploadDocument, uploadVideo, type CreatedSession, type PublicConfig } from "../api";
 import Recorder from "../components/Recorder";
+import VideoUpload from "../components/VideoUpload";
 
 type Step = "consent" | "document" | "video" | "submitting";
 const STEPS: { key: Step; label: string }[] = [
@@ -19,6 +20,7 @@ export default function KycFlow({ cfg }: { cfg: PublicConfig }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [docName, setDocName] = useState<string | null>(null);
+  const [mode, setMode] = useState<"camera" | "upload">("camera");
 
   async function start() {
     setBusy(true);
@@ -51,13 +53,13 @@ export default function KycFlow({ cfg }: { cfg: PublicConfig }) {
     }
   }
 
-  async function onVideo(blob: Blob) {
+  async function onVideo(blob: Blob, capture: "camera" | "upload" = "camera") {
     if (!session) return;
     if (blob.size > cfg.max_video_bytes) return setError("Video too large.");
     setStep("submitting");
     setError(null);
     try {
-      await uploadVideo(session, blob);
+      await uploadVideo(session, blob, capture);
       await submit(session);
       nav(`/session/${session.session_id}`);
     } catch (e) {
@@ -128,16 +130,18 @@ export default function KycFlow({ cfg }: { cfg: PublicConfig }) {
       {step === "video" && session && (
         <div className="space-y-4">
           {docName && <p className="text-sm text-emerald-700">✓ ID document uploaded: {docName}</p>}
-          <Recorder maxMs={session.duration_ms} onDone={onVideo} />
-          {cfg.demo_mode && (
-            <div className="card space-y-2 bg-amber-50/80 ring-amber-200">
-              <label htmlFor="vidfile" className="block text-sm font-medium">
-                Demo mode: or upload a video file (e.g. a dataset clip to test deepfake detection)
-              </label>
-              <input id="vidfile" type="file" accept="video/mp4,video/webm,video/quicktime" className="text-sm"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) onVideo(f); }} />
+          {cfg.allow_video_upload && (
+            <div role="tablist" aria-label="Video source" className="inline-flex gap-1 rounded-2xl bg-white p-1 ring-1 ring-slate-200 shadow-sm">
+              {([["camera", "?? Record with camera"], ["upload", "? Upload a recorded video"]] as const).map(([k, label]) => (
+                <button key={k} role="tab" aria-selected={mode === k} onClick={() => setMode(k)}
+                  className={`px-4 py-2 rounded-xl text-sm font-medium transition ${mode === k ? "bg-blue-600 text-white shadow" : "text-slate-600 hover:bg-slate-100"}`}>
+                  {label}
+                </button>))}
             </div>
           )}
+          {mode === "camera" || !cfg.allow_video_upload
+            ? <Recorder maxMs={session.duration_ms} onDone={(b) => onVideo(b, "camera")} />
+            : <VideoUpload maxBytes={cfg.max_video_bytes} onDone={(f) => onVideo(f, "upload")} />}
         </div>
       )}
 

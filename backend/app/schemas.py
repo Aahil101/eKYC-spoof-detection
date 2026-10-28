@@ -75,3 +75,4 @@ class PublicConfig(BaseModel):
     placeholder_bundle: bool
     max_document_bytes: int
     max_video_bytes: int
+    allow_video_upload: bool = False
