@@ -43,7 +43,8 @@ class ArtifactSpace:
             from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
             P = (Z - m) @ vt[:k].T
             lda = LinearDiscriminantAnalysis(solver="eigen", shrinkage="auto").fit(P, labels)
-            sp.lda_mean, sp.lda_scal = lda.xbar_, lda.scalings_[:, : max(1, len(set(labels)) - 1)]
+            # eigen solver has no xbar_ (svd only); P is already PCA-centred
+            sp.lda_mean, sp.lda_scal = np.zeros(P.shape[1]), lda.scalings_[:, : max(1, len(set(labels)) - 1)]
         return sp
 
     def transform(self, X: np.ndarray) -> np.ndarray:
@@ -181,7 +182,9 @@ def cluster_candidates(Z: np.ndarray, min_cluster_size: int = 8, eps: float | No
         sil = float(silhouette_score(Z, lab))
     return {"labels": lab, "clusters": clusters, "silhouette": sil, "eps": float(eps)}
 
-CANDIDATES = [("pca", 8), ("pca", 32), ("pca", 128), ("lda", 64), ("lda", 128)]
+# LDA (supervised) candidates were evaluated and REJECTED: on the small reference they overfit the known-class
+# means, so windows of new subjects fired H_A|Q 70% of the time on stationary data (docs/EXPERIMENTS.md, E6).
+CANDIDATES = [("pca", 8), ("pca", 32), ("pca", 128)]
 SCORERS = ("mahalanobis", "knn", "iforest", "lof")
 
 
@@ -203,18 +206,20 @@ def select_config(X_raw: np.ndarray, labels, seed: int = 0) -> dict:
             te_known, tr_idx = others[:n_te], others[n_te:]
             try:
                 m = fit_novelty(X_raw[tr_idx], list(labels[tr_idx]), seed, k, kind=kind)
-            except Exception:
+            except (ValueError, np.linalg.LinAlgError) as e:      # record, never hide, failed candidates
+                res.setdefault(f"{kind}{k}/_failed", []).append(str(e)[:80])
                 continue
             sk, sn = m.scores(X_raw[te_known]), m.scores(X_raw[labels == c])
             for s in SCORERS:
                 if s in sk:
                     auc = roc_auc_score(np.r_[np.zeros(len(sk[s])), np.ones(len(sn[s]))], np.r_[sk[s], sn[s]])
                     res.setdefault(f"{kind}{k}/{s}", []).append(float(auc))
-    summary = {key: {"mean_auroc": float(np.mean(v)), "per_class": v} for key, v in res.items()}
+    failed = {k: v for k, v in res.items() if k.endswith("/_failed")}
+    summary = {key: {"mean_auroc": float(np.mean(v)), "per_class": v} for key, v in res.items() if key not in failed}
     best = max(summary, key=lambda key: summary[key]["mean_auroc"])
     kind_k, scorer = best.split("/")
     kind = "lda" if kind_k.startswith("lda") else "pca"
-    return {"kind": kind, "k": int(kind_k[3:]), "scorer": scorer, "loco": summary, "classes": classes}
+    return {"kind": kind, "k": int(kind_k[3:]), "scorer": scorer, "loco": summary, "classes": classes, "failed": failed}
 
 # ---------------------------------------------------------------- forgery-specific artifact vector (E6 pilot)
 M2_SCALARS = ("m2_clip_temporal_mean_step", "m2_clip_temporal_max_step", "m2_clip_consistency",

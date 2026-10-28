@@ -100,7 +100,8 @@ def build_reference(cfg: dict, ctx) -> dict:
     known = np.flatnonzero((T["source"] != "celebdf") & ~np.isin(T["video_class"], list(hold)))
     sample = {}
     for nname, novel in (("holdout_" + "+".join(sorted(hold)), np.flatnonzero(np.isin(T["video_class"], list(hold)))),
-                         ("celebdf_fakes", np.flatnonzero((T["source"] == "celebdf") & (T["y"] == 0)))):
+                         ("celebdf_fakes", np.flatnonzero((T["source"] == "celebdf") & (T["y"] == 0))),
+                         ("CONTROL_celebdf_genuine", np.flatnonzero((T["source"] == "celebdf") & (T["y"] == 1)))):
         if not len(novel):
             continue
         sc_known, sc_novel = nov.scores(T["A"][known]), nov.scores(T["A"][novel])
@@ -169,7 +170,21 @@ def build_reference(cfg: dict, ctx) -> dict:
                 rep["recommendations"] = recommend(rep, sens, f"{name}#0", p.get("bundle_name", "kyc-v0.4"))
                 examples[name] = {k: v for k, v in rep.items() if not k.startswith("_")}
         rate = lambda key: float(np.mean([t[key] for t in tests]))
+
+        # E7 baselines computed from the SAME window tests (only the decision rule differs)
+        def b_ood_only(t):          # (b) novelty = elevated OOD rate; drift otherwise
+            return "NOVEL_ATTACK" if t["H_novel"] else ("QUALITY_DRIFT" if t["H_Q"] else "CONCEPT_DRIFT" if t["H_A|Q"] else
+                                                       "OUTPUT_DRIFT" if t["output_shift"] else "NONE")
+
+        def b_no_quality(t):        # (f) proposed rule without the quality-conditional test: any shift is drift
+            return ("NOVEL_ATTACK" if t["H_novel"] and t["coherent_cluster"] else
+                    "CONCEPT_DRIFT" if (t["H_Q"] or t["H_A|Q"]) else "OUTPUT_DRIFT" if t["output_shift"] else "NONE")
+        base = {"ood_rate_only": [b_ood_only(t) for t in tests], "no_quality_conditioning": [b_no_quality(t) for t in tests]}
         results[name] = {"labels": labels, "correct_frac": float(np.mean([l in expected[name] for l in labels])),
+                         "baselines": {k: {"labels": v, "correct_frac": float(np.mean([l in expected[name] for l in v])),
+                                           "false_novelty_frac": float(np.mean([l in ("NOVEL_ATTACK", "MIXED") for l in v]))}
+                                       for k, v in base.items()},
+                         "false_novelty_frac": float(np.mean([l in ("NOVEL_ATTACK", "MIXED") for l in labels])),
                          "expected": sorted(expected[name]),
                          "test_fire_rates": {k: rate(k) for k in ("H_Q", "H_novel", "coherent_cluster", "H_A|Q", "output_shift")}}
         ctx.log("scenario", name=name, correct=results[name]["correct_frac"], rates=results[name]["test_fire_rates"])
@@ -181,6 +196,8 @@ def build_reference(cfg: dict, ctx) -> dict:
               "sample_level_novelty": sample, "holdout_classes": sorted(hold),
               "novelty_selection": {k: v for k, v in sel.items() if k != "loco"} | {"loco_mean_auroc": {k: v["mean_auroc"] for k, v in sel["loco"].items()}}, "scenarios": results,
               "macro_accuracy": float(np.mean([v["correct_frac"] for v in results.values()])),
+              "macro_accuracy_baselines": {b: float(np.mean([v["baselines"][b]["correct_frac"] for v in results.values()]))
+                                           for b in ("ood_rate_only", "no_quality_conditioning")},
               "window": W, "repeats": n_rep, "sensitivity_source": sens["source"]}
     ctx.save_artifact("reference.pkl", pickle.dumps({"quality_names": qn, "reference": R, "novelty": nov,
                                                      "sensitivity": sens, "stream_pool": T,
